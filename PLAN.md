@@ -42,7 +42,7 @@ shift.
 
 ---
 
-## Phase 0 — Project Bootstrap
+## ~~Phase 0 — Project Bootstrap~~ ✅ DONE
 
 - `nest new` (npm), strict TypeScript.
 - `@nestjs/config` — `ConfigModule.forRoot({ isGlobal: true })`, `.env.example` committed, real `.env` gitignored.
@@ -56,10 +56,11 @@ shift.
 - `.env.example` keys: `NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (last two added when Phase 5 starts).
 
 **Done when:** app boots, connects to Postgres + Redis, `/api/v1/health` returns 200.
+✅ Verified live, 2026-10-06.
 
 ---
 
-## Phase 1 — Auth & User Core
+## ~~Phase 1 — Auth & User Core~~ ✅ DONE
 
 Covers spec §4.1 (Sign Up, User Profile, Household Notes) minus phone OTP.
 
@@ -82,6 +83,13 @@ Covers spec §4.1 (Sign Up, User Profile, Household Notes) minus phone OTP.
 **Rules carried from `GUIDE.md`:** OTP via `crypto.randomInt(10000, 100000)`, Redis attempt-counter capping verify attempts, OTP helper (generate+send) as one private method shared across sign-up/forgot-password/resend, roles guard scaffolded now (`RolesGuard` + `@Roles()`) even though only `CUSTOMER` exists until Phase 3 — needed so Phase 3/8 don't retrofit auth.
 
 **Done when:** full sign-up → verify → sign-in → authenticated profile read/update cycle works against Postgres+Redis, logout invalidates the session.
+✅ Verified live end-to-end, 2026-10-06 — see `PHASE_1_NOTES.md` for the walkthrough,
+`postman/Handy-AI.postman_collection.json` for runnable examples. One deviation from
+the plan as written: `UserSession.refreshTokenHash` holds a hash of the JWT's `sid`
+(session id) claim, not a separate refresh token — no refresh-token issuance/rotation
+endpoint was built (never in this plan's scope). `User` also gained `resetToken`/
+`resetTokenExpiresAt` fields beyond the plan's original entity list, needed to
+implement the "short-lived reset token" the plan's own `verify-otp` bullet called for.
 
 ---
 

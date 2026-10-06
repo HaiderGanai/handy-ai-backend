@@ -37,9 +37,9 @@ something that's *always* "my own profile" by definition.
 ## Tech stack (locked in)
 
 - NestJS + TypeScript, global prefix `api/v1`.
-- PostgreSQL + TypeORM, migrations only (no `synchronize: true` past local dev).
-- Redis via `cache-manager` — sessions, OTP attempt counters.
-- Passport JWT auth; `UserSession` entity mirrors Redis session cache (logout clears both — `GUIDE.md` §5).
+- PostgreSQL + TypeORM **0.3.x** (not 1.x — see decisions log), migrations only (no `synchronize: true` past local dev).
+- Redis: `cache-manager` v7 + `@keyv/redis` for sessions; raw `@redis/client` (`RedisService`) only for the OTP attempt counter's atomic `INCR`+`TTL` (cache-manager's get/set can't do that atomically).
+- Passport JWT auth with a session layer on top (JWT carries a `sid` claim checked against a cached session on every request — a plain JWT can't otherwise be revoked before it expires). `UserSession` entity mirrors the Redis session cache; logout clears both — `GUIDE.md` §5. Single active session per user (a new sign-in retires the previous one); no multi-device support.
 - nodemailer (SMTP) wrapped in `MailService`.
 - bcryptjs for password hashing.
 - multer (memory storage) + Cloudinary for all image/document uploads (avatars, provider documents). API keys arrive later, on demand — module is built now against env vars so nothing changes when the keys land.
@@ -53,7 +53,7 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
 | Phase | What | Status |
 |---|---|---|
 | 0 | Project bootstrap (Nest app, TypeORM, config, global pipes, mail module) | Done |
-| 1 | Auth & user core (email OTP sign-up, sign-in, forgot/reset password, profile, household notes) | Not started |
+| 1 | Auth & user core (email OTP sign-up, sign-in, forgot/reset password, profile, household notes) | Done |
 | 2 | Service catalog (4 categories + sub-services, seeded) | Not started |
 | 3 | Providers & vetting (onboarding, documents, admin approve/reject) | Not started |
 | 4 | Bookings (plan → confirm → accept/decline → complete, trusted providers) | Not started |
@@ -85,14 +85,12 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
     CLI defaults to (ESM + vitest + oxlint) — Nest 12 just shipped and the
     TypeORM/Passport/Stripe/cache-manager ecosystem this project leans on is proven
     against the CommonJS/Jest setup, not the new ESM one.
-  - TypeORM's `latest` tag is now **1.x** (0.3 was retagged `legacy` as of this date)
-    — installed 1.x deliberately, not a mistake if you see it in `package.json`.
+  - TypeORM's `latest` tag was `1.x` at the time (0.3 retagged `legacy`) and that's
+    what got installed initially — **reversed in Phase 1**, see below. Leaving this
+    line as a record of the call, not current state.
   - Redis cache: `cache-manager` v7 is Keyv-based now; used `@keyv/redis` (wraps
     `@redis/client`), not `cache-manager-ioredis-yet` (deprecated, built for the old
-    store interface) and not a bare `ioredis` client. If Phase 1's OTP attempt
-    counter needs atomic `INCR`+`TTL` beyond what the cache-manager interface gives,
-    reach for `@redis/client` directly — same Redis client library already in the
-    tree, no second one.
+    store interface) and not a bare `ioredis` client.
   - Verified end-to-end against real Postgres+Redis (throwaway Docker containers,
     torn down after): app boots, `GET /api/v1/health` → 200.
 - 2026-10-06 — Added `docker-compose.yml` for local Postgres (port **5433**, not
@@ -103,6 +101,39 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
   credentials (`postgres` / value in `.env`). `DATABASE_URL` in `.env`/`.env.example`
   points at 5433 accordingly. Verified: real user-chosen password connects via
   `psql` and the app boots against it end-to-end.
+- 2026-10-06 — Phase 1 complete (auth + user profile). Full writeup:
+  `PHASE_1_NOTES.md`. Postman collection with runnable examples:
+  `postman/Handy-AI.postman_collection.json`.
+  - **Reversed the Phase 0 TypeORM bet.** Writing Phase 1's Jest unit tests
+    surfaced that `typeorm@1.x` + `@nestjs/typeorm@12.x` cannot be unit-tested
+    under this CommonJS/Jest setup at all: the whole `@nestjs/*` family jumped to
+    ESM-only (`"type": "module"`) at their newest majors simultaneously, and
+    `@nestjs/typeorm@12.x`'s TypeORM-v1 compat shim additionally uses
+    `import.meta.url`, which no Jest transform can downlevel to CommonJS (Node's
+    own `require(esm)` handles it fine at app runtime — that's why `npm run
+    build`/boot worked throughout but `npm test` couldn't). Pinned back to
+    `typeorm@^0.3.31` + `@nestjs/typeorm@^11.0.3`, and for the same ESM reason
+    also pinned `@nestjs/cache-manager@^3.1.3`, `@nestjs/config@^4.0.4`,
+    `@nestjs/jwt@^11.0.2`, `@nestjs/passport@^11.0.5` — their 11.x/3.x lines,
+    all CommonJS, all what the ecosystem has actually run in production for
+    years. **Takeaway for future phases: don't ride `latest` on a package whose
+    major version shipped in the last few days — verify it's actually
+    unit-testable under this project's toolchain before building on it, not
+    after.**
+  - `JWT_EXPIRES_IN` is a **plain number of seconds** (e.g. `86400`), not a
+    duration string like `1d` — it's reused as-is for the Redis/DB session TTL,
+    and parsing duration strings for that would've meant a new dependency for
+    no real benefit.
+  - Found and fixed a real bug via the live verification pass (not caught by
+    unit tests, whose mock inputs didn't replicate the real DTO shape): `PATCH
+    /user/profile` with a partial body wiped every omitted field to `null`.
+    Cause: this project's `tsconfig.json` `target: "ES2023"` gives class fields
+    native-define semantics, so every declared-but-unset optional field on
+    `UpdateProfileDto` still exists as an own `undefined` property, and
+    `Object.assign(user, dto)` copied those onto the entity. Fixed in
+    `UserService.updateProfile` by filtering `undefined` values out first. Worth
+    remembering for *any* future DTO-merge-onto-entity code in this codebase,
+    not just this one spot.
 
 ## Conventions
 
@@ -112,7 +143,8 @@ context only.
 
 ## Env vars (grows per phase — see `PLAN.md` Phase 0 and Phase 5)
 
-`NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`,
-`MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`,
+`NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`
+(**seconds, not a duration string** — e.g. `86400`, also used as the session's
+Redis/DB TTL), `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`,
 `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (keys provided
 later, on demand), `STRIPE_SECRET_KEY` (Phase 5), `STRIPE_WEBHOOK_SECRET` (Phase 5).
