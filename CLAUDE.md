@@ -95,6 +95,14 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
     tree, no second one.
   - Verified end-to-end against real Postgres+Redis (throwaway Docker containers,
     torn down after): app boots, `GET /api/v1/health` → 200.
+- 2026-10-06 — Added `docker-compose.yml` for local Postgres (port **5433**, not
+  5432) + Redis (6379). This machine already runs a separate, pre-existing
+  system-wide Postgres bound to 5432 with unrelated credentials — rather than
+  change that shared instance's password to match what the user wants for this
+  project, this project gets its own isolated container with exactly those
+  credentials (`postgres` / value in `.env`). `DATABASE_URL` in `.env`/`.env.example`
+  points at 5433 accordingly. Verified: real user-chosen password connects via
+  `psql` and the app boots against it end-to-end.
 
 ## Conventions
 

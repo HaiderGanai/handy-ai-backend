@@ -6,9 +6,25 @@ conventions: `GUIDE.md`.
 
 ## Requirements
 
-- Node.js, PostgreSQL, Redis
+- Node.js, Docker (for local Postgres/Redis — see below)
 - Copy `.env.example` to `.env` and fill in values (Cloudinary/Stripe keys can stay
   blank until those phases start)
+
+## Local Postgres/Redis
+
+```bash
+docker compose up -d
+```
+
+Starts Postgres on `localhost:5433` (not 5432 — that port's already taken by a
+system-wide Postgres on this machine, kept untouched) and Redis on `localhost:6379`,
+using the `POSTGRES_*`/`REDIS_PORT` values from `.env`.
+
+**Connecting with pgAdmin:** "Host name/address" must be `localhost` — put the
+friendly label (e.g. `HandyAi`) in the **Name** field on the General tab instead,
+not Host. Host/Port/Maintenance DB/Username/Password go on the Connection tab:
+Host `localhost`, Port `5433`, Maintenance DB `postgres`, Username/Password from
+your `.env`.
 
 ## Scripts
 
