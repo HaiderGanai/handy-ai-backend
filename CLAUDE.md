@@ -163,7 +163,9 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
     a document resets it to PENDING and moves a REJECTED provider back to PENDING.
   - Approve allowed from PENDING or DISABLED (that's the re-enable path); reject only from
     PENDING; disable only from APPROVED.
-  - Document uploads (JPEG/PNG/PDF, 5 MB) go to Cloudinary; verified live except the final
+  - `POST /provider/documents` is multipart with the document type as the file field name
+    (1-5 files per request, one per type), not a `type` field + one file.
+  - Document uploads (JPEG/PNG/PDF, 5 MB each) go to Cloudinary; verified live except the final
     upload call, which needs real `CLOUDINARY_*` keys (returns 500 without them).
 
 ## Conventions

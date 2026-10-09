@@ -17,7 +17,7 @@ UPDATE users SET role = 'ADMIN' WHERE email = 'admin@example.com';
 | POST | `/provider/onboarding` | JSON, below | 201 provider (status `PENDING`). 409 if already onboarded. |
 | GET | `/provider/profile` | - | provider + categories, availability, documents |
 | PATCH | `/provider/profile` | any subset of the onboarding fields | updated provider. `availability` / `categoryIds` replace the old values. |
-| POST | `/provider/documents` | multipart: `type`, `document` (file) | the document (status `PENDING`) |
+| POST | `/provider/documents` | multipart form-data, 1 to 5 file fields (see below) | array of the saved documents (status `PENDING`) |
 
 Onboarding body:
 
@@ -32,9 +32,16 @@ Onboarding body:
 
 `dayOfWeek` is 0 (Sunday) to 6. Times are `HH:mm`, start before end.
 
-Document `type`: `GOVERNMENT_ID`, `RIGHT_TO_WORK`, `LIABILITY_INSURANCE`, `REFERENCE`,
-`PROFILE_PHOTO`. File must be JPEG, PNG or PDF, max 5 MB. Re-uploading a type replaces it and
-sets it back to `PENDING`; a `REJECTED` provider who re-uploads returns to `PENDING`.
+### Uploading documents
+
+In Postman choose Body > form-data and add one row per file with the **key set to the document
+type** and the value type set to **File**. There is no separate `type` field. Valid keys:
+`GOVERNMENT_ID`, `RIGHT_TO_WORK`, `LIABILITY_INSURANCE`, `REFERENCE`, `PROFILE_PHOTO`.
+
+Send 1 to 5 files per request (one per key, so 5 at most). Any other key returns
+`Unexpected file field - <key>`. Files must be JPEG, PNG or PDF, max 5 MB each; if any file is
+invalid nothing is uploaded. Uploading a type that already exists replaces it and sets it back to
+`PENDING`; a `REJECTED` provider who re-uploads returns to `PENDING`.
 
 ## Admin
 

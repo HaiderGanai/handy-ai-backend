@@ -5,6 +5,7 @@ import { ServiceCategory } from '../../catalog/entities/service-category.entity'
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
 import { ProviderDocument } from '../entities/provider-document.entity';
 import { Provider } from '../entities/provider.entity';
+import { DocumentStatus } from '../enums/document-status.enum';
 import { DocumentType } from '../enums/document-type.enum';
 import { ProviderStatus } from '../enums/provider-status.enum';
 import { ProviderService } from './provider.service';
@@ -78,25 +79,48 @@ describe('ProviderService', () => {
     );
   });
 
+  it('rejects an upload with no files', async () => {
+    await expect(service.uploadDocuments('u1', {})).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+
   it('rejects disallowed document file types', async () => {
     const file = { mimetype: 'text/html' } as Express.Multer.File;
     await expect(
-      service.uploadDocument('u1', { type: DocumentType.GOVERNMENT_ID }, file),
+      service.uploadDocuments('u1', { [DocumentType.GOVERNMENT_ID]: [file] }),
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('resets a rejected provider to pending when a document is re-uploaded', async () => {
-    const provider = { id: 'p1', status: ProviderStatus.REJECTED };
+  it('uploads several documents, replacing existing ones and resetting a rejected provider', async () => {
+    const existing = {
+      type: DocumentType.REFERENCE,
+      fileUrl: 'old',
+      status: DocumentStatus.REJECTED,
+    };
+    const provider = {
+      id: 'p1',
+      status: ProviderStatus.REJECTED,
+      documents: [existing],
+    };
     providerRepo.findOne.mockResolvedValue(provider);
-    documentRepo.findOne.mockResolvedValue(null);
-    uploadBuffer.mockResolvedValue({ secure_url: 'https://x/doc.pdf' });
+    uploadBuffer.mockResolvedValue({ secure_url: 'https://x/new' });
     const file = {
       mimetype: 'application/pdf',
       buffer: Buffer.from(''),
     } as Express.Multer.File;
 
-    await service.uploadDocument('u1', { type: DocumentType.REFERENCE }, file);
+    const saved = await service.uploadDocuments('u1', {
+      [DocumentType.REFERENCE]: [file],
+      [DocumentType.GOVERNMENT_ID]: [file],
+    });
 
+    expect(saved).toHaveLength(2);
+    expect(uploadBuffer).toHaveBeenCalledTimes(2);
+    expect(existing).toMatchObject({
+      fileUrl: 'https://x/new',
+      status: DocumentStatus.PENDING,
+    });
     expect(provider.status).toBe(ProviderStatus.PENDING);
   });
 });

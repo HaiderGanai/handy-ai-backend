@@ -10,11 +10,11 @@ import { ServiceCategory } from '../../catalog/entities/service-category.entity'
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
 import { OnboardProviderDto } from '../dto/onboard-provider.dto';
 import { UpdateProviderProfileDto } from '../dto/update-provider-profile.dto';
-import { UploadDocumentDto } from '../dto/upload-document.dto';
 import { AvailabilitySlotDto } from '../dto/availability-slot.dto';
 import { ProviderDocument } from '../entities/provider-document.entity';
 import { Provider } from '../entities/provider.entity';
 import { DocumentStatus } from '../enums/document-status.enum';
+import { DocumentType } from '../enums/document-type.enum';
 import { ProviderStatus } from '../enums/provider-status.enum';
 
 const ALLOWED_DOCUMENT_MIME_TYPES = [
@@ -94,39 +94,54 @@ export class ProviderService {
     return this.providerRepository.save(provider);
   }
 
-  async uploadDocument(
+  async uploadDocuments(
     userId: string,
-    data: UploadDocumentDto,
-    file: Express.Multer.File | undefined,
-  ): Promise<ProviderDocument> {
-    if (!file) {
-      throw new BadRequestException('Document file is required!');
+    files: Partial<Record<DocumentType, Express.Multer.File[]>>,
+  ): Promise<ProviderDocument[]> {
+    //the field name of each file is its document type
+    const uploads = Object.entries(files).map(([type, [file]]) => ({
+      type: type as DocumentType,
+      file,
+    }));
+    if (uploads.length === 0) {
+      throw new BadRequestException('At least one document file is required!');
     }
-    if (!ALLOWED_DOCUMENT_MIME_TYPES.includes(file.mimetype)) {
+    if (
+      uploads.some(
+        ({ file }) => !ALLOWED_DOCUMENT_MIME_TYPES.includes(file.mimetype),
+      )
+    ) {
       throw new BadRequestException('Only JPEG, PNG or PDF files are allowed!');
     }
 
     const provider = await this.providerRepository.findOne({
       where: { userId },
+      relations: { documents: true },
     });
     if (!provider) {
       throw new NotFoundException('Provider profile not found!');
     }
 
-    //upload to cloudinary and store the returned secure url
-    const result = await this.cloudinaryService.uploadBuffer(
-      file.buffer,
-      `handy-ai/provider-documents/${provider.id}`,
+    //upload to cloudinary and store the returned secure urls
+    const urls = await Promise.all(
+      uploads.map(({ file }) =>
+        this.cloudinaryService.uploadBuffer(
+          file.buffer,
+          `handy-ai/provider-documents/${provider.id}`,
+        ),
+      ),
     );
 
     //re-uploading a type replaces it and sends it back for review
-    const document =
-      (await this.documentRepository.findOne({
-        where: { provider: { id: provider.id }, type: data.type },
-      })) ?? this.documentRepository.create({ provider, type: data.type });
-    document.fileUrl = result.secure_url;
-    document.status = DocumentStatus.PENDING;
-    const saved = await this.documentRepository.save(document);
+    const documents = uploads.map(({ type }, index) => {
+      const document =
+        provider.documents.find((existing) => existing.type === type) ??
+        this.documentRepository.create({ provider, type });
+      document.fileUrl = urls[index].secure_url;
+      document.status = DocumentStatus.PENDING;
+      return document;
+    });
+    const saved = await this.documentRepository.save(documents);
 
     //a rejected provider who resubmits goes back into the review queue
     if (provider.status === ProviderStatus.REJECTED) {
