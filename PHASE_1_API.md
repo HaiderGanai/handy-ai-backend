@@ -47,6 +47,10 @@ Body
 ```
 Rules: valid email, password ≥ 8 chars, fullName string.
 
+Optional `"role": "PROVIDER"` (added in Phase 3) creates a provider account; omitted =
+`CUSTOMER`. `ADMIN` is rejected (400 `role must be one of the following values: CUSTOMER, PROVIDER`).
+The role is fixed at sign-up and travels in the JWT. See `PHASE_3_API.md`.
+
 | Status | Body |
 |---|---|
 | **201** | `{ "message": "Verification code sent to your email!" }` |

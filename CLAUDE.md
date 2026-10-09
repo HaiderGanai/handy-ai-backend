@@ -151,7 +151,9 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
   - Gotcha: `migration:generate` output has no seed; a first attempt at injecting
     seed code silently didn't match and the migration ran empty - always verify
     seeded rows after running, not just "executed successfully".
-- 2026-10-09 - Phase 3 complete (providers & vetting). API reference: `PHASE_3_API.md`.
+- 2026-10-09 - Phase 3 complete (providers & vetting). Writeups: `PHASE_3_MODULE_GUIDE.md`,
+  `PHASE_3_API.md`; Postman "Provider" and "Admin" folders added; `PHASE_1_API.md` sign-up
+  documents the new `role` field.
   - **Roles:** `POST /auth/sign-up` takes optional `role` (`CUSTOMER` default | `PROVIDER`);
     `ADMIN` is rejected by validation. Admins are promoted in the DB:
     `UPDATE users SET role='ADMIN' WHERE email='...'` then sign in again (role lives in the JWT).
