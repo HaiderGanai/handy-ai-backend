@@ -23,11 +23,10 @@ Conventions
 3. `POST /auth/sign-in` — response has `accessToken` and `user.role = "PROVIDER"`
 4. `POST /provider/onboarding`, then `POST /provider/documents`; wait for an admin.
 
-**Admin:** there is no endpoint. Sign up/verify a normal account, then promote it in the
-database and **sign in again** (the role is stored in the JWT):
-```sql
-UPDATE users SET role = 'ADMIN' WHERE email = 'admin@example.com';
-```
+**Admin:** there is no sign-up for admins. Create the account directly in the database
+(`role = 'ADMIN'`, `isEmailVerified = true`, bcrypt-hashed password), or promote an existing
+user with `UPDATE users SET role = 'ADMIN' WHERE email = '...'` and have them sign in again
+(the role is stored in the JWT). Admins sign in only through `POST /admin/auth/sign-in` (below).
 
 Recommended run order: Sign Up (PROVIDER) → Verify OTP → Sign In → Get Service
 Categories (copy a category `id`) → Onboarding → Upload Documents → *(as admin)* List →
@@ -177,6 +176,28 @@ Rules
 ---
 
 ## Admin (`ADMIN` token)
+
+### 0. POST `{{baseUrl}}/admin/auth/sign-in`
+Admin-only login. Same body and response as `POST /auth/sign-in`, but it only accepts `ADMIN`
+accounts, and `POST /auth/sign-in` in turn refuses admins. Either way, a wrong password, an
+unknown email, or an account of the wrong role all return the same 401, so the response doesn't
+reveal which accounts are admins.
+
+Body
+```json
+{ "email": "admin@admin.com", "password": "<admin password>" }
+```
+
+| Status | Body |
+|---|---|
+| **201** | `{ "user": { ..., "role": "ADMIN" }, "accessToken": "<jwt>" }` |
+| 401 | `{ "message": "Invalid credentials!", "error": "Unauthorized", "statusCode": 401 }` |
+| 403 | `Please verify your email first!` (account not verified) |
+
+Use the returned `accessToken` as `adminToken` in the endpoints below. Signing in replaces any
+previous session for that user (single active session).
+
+---
 
 ### 5. GET `{{baseUrl}}/admin/providers`
 Optional query `?status=PENDING` (`PENDING | APPROVED | REJECTED | DISABLED`). Oldest

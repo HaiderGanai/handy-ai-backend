@@ -155,8 +155,13 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
   `PHASE_3_API.md`; Postman "Provider" and "Admin" folders added; `PHASE_1_API.md` sign-up
   documents the new `role` field.
   - **Roles:** `POST /auth/sign-up` takes optional `role` (`CUSTOMER` default | `PROVIDER`);
-    `ADMIN` is rejected by validation. Admins are promoted in the DB:
-    `UPDATE users SET role='ADMIN' WHERE email='...'` then sign in again (role lives in the JWT).
+    `ADMIN` is rejected by validation. Admins are created/promoted in the DB
+    (`role='ADMIN'`, `isEmailVerified=true`; promoted users must sign in again - role lives
+    in the JWT). First admin `admin@admin.com` created 2026-10-09 (password given to the
+    user once, not stored in the repo).
+  - **Admin login is its own endpoint:** `POST /admin/auth/sign-in` accepts only ADMIN;
+    `POST /auth/sign-in` rejects ADMIN. Wrong role returns the same generic 401 as a bad
+    password (no admin enumeration). Forgot/reset password is still shared.
   - Provider categories use a plain `@ManyToMany` join table (`provider_service_categories`),
     not a hand-written join entity. `postcodeCoverage` is a text[]; availability is replaced
     wholesale on `PATCH /provider/profile`.

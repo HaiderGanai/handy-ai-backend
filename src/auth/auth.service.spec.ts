@@ -224,6 +224,40 @@ describe('AuthService', () => {
     });
   });
 
+  describe('admin sign-in separation', () => {
+    const adminUser = async (role: Role) => ({
+      id: 'user-id',
+      email: 'a@example.com',
+      role,
+      isEmailVerified: true,
+      password: await bcrypt.hash('correct-password', 10),
+    });
+    const credentials = {
+      email: 'a@example.com',
+      password: 'correct-password',
+    };
+
+    it('blocks an admin from the regular sign-in', async () => {
+      userRepository.findOne.mockResolvedValue(await adminUser(Role.ADMIN));
+      await expect(service.signIn(credentials)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('blocks a non-admin from the admin sign-in', async () => {
+      userRepository.findOne.mockResolvedValue(await adminUser(Role.PROVIDER));
+      await expect(service.adminSignIn(credentials)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('signs an admin in through the admin sign-in', async () => {
+      userRepository.findOne.mockResolvedValue(await adminUser(Role.ADMIN));
+      const result = await service.adminSignIn(credentials);
+      expect(result.accessToken).toBe('signed.jwt.token');
+    });
+  });
+
   describe('forgotPassword', () => {
     it('returns the same message whether or not the email exists', async () => {
       userRepository.findOne.mockResolvedValue(null);

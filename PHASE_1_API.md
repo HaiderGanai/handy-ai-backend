@@ -98,6 +98,8 @@ resets the attempt counter.
 ---
 
 ### 4. POST `{{baseUrl}}/auth/sign-in`
+For customers and providers. Admin accounts get 401 here; they use `POST /admin/auth/sign-in` (`PHASE_3_API.md`).
+
 Body
 ```json
 {

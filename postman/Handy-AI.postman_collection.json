@@ -983,8 +983,51 @@
     },
     {
       "name": "Admin",
-      "description": "Needs an ADMIN token in adminToken (promote a user with SQL, then sign in again). providerId is the provider's id, not the user id.",
+      "description": "Sign in with Admin Sign In (stores adminToken). Admin accounts are created in the database; they cannot use /auth/sign-in. providerId is the provider's id, not the user id.",
       "item": [
+        {
+          "name": "Admin Sign In",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"adminToken\", pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@admin.com\",\n  \"password\": \"<admin password>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/auth/sign-in",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "auth",
+                "sign-in"
+              ]
+            }
+          }
+        },
         {
           "name": "List Providers",
           "request": {

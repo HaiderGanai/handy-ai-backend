@@ -143,19 +143,23 @@ export class AuthService {
   }
 
   async signIn(data: SignInDto, userAgent?: string): Promise<AuthResponse> {
-    const email = data.email.trim().toLowerCase();
+    const user = await this.verifyCredentials(data);
 
-    //check credentials
-    const user = await this.userRepository.findOne({ where: { email } });
-    if (!user) {
+    //admins sign in through their own endpoint only
+    if (user.role === Role.ADMIN) {
       throw new UnauthorizedException('Invalid credentials!');
     }
-    if (!user.isEmailVerified) {
-      throw new ForbiddenException('Please verify your email first!');
-    }
 
-    const passwordMatches = await bcrypt.compare(data.password, user.password);
-    if (!passwordMatches) {
+    return this.createSession(user, userAgent);
+  }
+
+  async adminSignIn(
+    data: SignInDto,
+    userAgent?: string,
+  ): Promise<AuthResponse> {
+    const user = await this.verifyCredentials(data);
+
+    if (user.role !== Role.ADMIN) {
       throw new UnauthorizedException('Invalid credentials!');
     }
 
@@ -229,6 +233,25 @@ export class AuthService {
         : 'Reset your Handy AI password';
     const html = `<p>Your Handy AI verification code is <strong>${code}</strong>. It expires in ${OTP_TTL_MINUTES} minutes.</p>`;
     await this.mailService.sendMail(user.email, subject, html);
+  }
+
+  private async verifyCredentials(data: SignInDto): Promise<User> {
+    const email = data.email.trim().toLowerCase();
+
+    //check credentials
+    const user = await this.userRepository.findOne({ where: { email } });
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials!');
+    }
+    if (!user.isEmailVerified) {
+      throw new ForbiddenException('Please verify your email first!');
+    }
+
+    const passwordMatches = await bcrypt.compare(data.password, user.password);
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Invalid credentials!');
+    }
+    return user;
   }
 
   private async createSession(

@@ -28,7 +28,8 @@ Later phases consume it:
 | `src/provider/dto/*.dto.ts` | request DTOs (onboarding, profile update, availability slot, reject, list query) |
 | `src/provider/services/*.spec.ts` | unit tests for both services |
 | `src/database/migrations/…Phase3ProvidersVetting.ts` | the four new tables |
-| `src/auth/dto/sign-up.dto.ts`, `auth.service.ts` | sign-up now accepts `role` |
+| `src/auth/dto/sign-up.dto.ts`, `auth.service.ts` | sign-up now accepts `role`; `signIn` refuses admins, new `adminSignIn` |
+| `src/auth/admin-auth.controller.ts` | `POST /admin/auth/sign-in` |
 
 Controller method names equal service method names (`GUIDE.md` §2.1); the acting user is
 always `req.user.id` from the JWT, never from the body.
@@ -40,8 +41,14 @@ always `req.user.id` from the JWT, never from the body.
   `@UseGuards(AuthGuard('jwt'), RolesGuard)` then `@Roles(Role.PROVIDER)` on the class.
 - **How a user becomes a provider:** `SignUpDto.role` (optional, `@IsIn([CUSTOMER,
   PROVIDER])`), stored on the user at sign-up. Fixed afterwards; no role-switch endpoint.
-- **How a user becomes an admin:** only by editing the database
-  (`UPDATE users SET role='ADMIN' ...`). `ADMIN` can never be requested at sign-up.
+- **How a user becomes an admin:** only by creating/editing the row in the database
+  (`role='ADMIN'`). `ADMIN` can never be requested at sign-up.
+- **Admin login is separate:** `POST /admin/auth/sign-in` (`AdminAuthController` →
+  `AuthService.adminSignIn`) accepts only `ADMIN` users, and `AuthService.signIn` rejects
+  `ADMIN` users. Both share a private `verifyCredentials` (verified email + bcrypt check),
+  then check the role and return the same generic `Invalid credentials!` 401 for a wrong role,
+  so the endpoints don't reveal which emails are admins. Session creation is shared.
+  `forgot-password`/`reset-password` remain shared with normal users.
 - The role is read from the **JWT** (`JwtStrategy.validate`), so a changed role only takes
   effect after signing in again.
 
@@ -123,7 +130,7 @@ Invalid transitions return 400 with a plain message. `:id` is validated with
   guarded by role `PROVIDER`, but nothing could ever assign that role. Cheapest fix that
   keeps the plan's guard intact. If customers should be able to upgrade later, that's a
   separate endpoint.
-- **Admin by SQL**, not seeded or env-driven: one-time operation, no new code path that
+- **Admin created in the database**, not seeded or env-driven (the first admin, `admin@admin.com`, was inserted directly with a bcrypt hash): one-time operation, no new code path that
   could be abused. Revisit if admins need to be created regularly.
 - **Document review is all-or-nothing.** Approve/reject sets every document's status
   with the provider's. `ProviderDocument.status` exists per the plan, but there is no
