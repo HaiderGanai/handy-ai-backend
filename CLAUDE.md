@@ -55,7 +55,7 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
 | 0 | Project bootstrap (Nest app, TypeORM, config, global pipes, mail module) | Done |
 | 1 | Auth & user core (email OTP sign-up, sign-in, forgot/reset password, profile, household notes) | Done |
 | 2 | Service catalog (4 categories + sub-services, seeded) | Done |
-| 3 | Providers & vetting (onboarding, documents, admin approve/reject) | Not started |
+| 3 | Providers & vetting (onboarding, documents, admin approve/reject) | Done |
 | 4 | Bookings (plan → confirm → accept/decline → complete, trusted providers) | Not started |
 | 5 | Payments (Stripe Connect, hold/release, 80/20 split) | Not started |
 | 6 | In-app messaging (per booking, user↔provider) | Not started |
@@ -151,6 +151,20 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
   - Gotcha: `migration:generate` output has no seed; a first attempt at injecting
     seed code silently didn't match and the migration ran empty - always verify
     seeded rows after running, not just "executed successfully".
+- 2026-10-09 - Phase 3 complete (providers & vetting). API reference: `PHASE_3_API.md`.
+  - **Roles:** `POST /auth/sign-up` takes optional `role` (`CUSTOMER` default | `PROVIDER`);
+    `ADMIN` is rejected by validation. Admins are promoted in the DB:
+    `UPDATE users SET role='ADMIN' WHERE email='...'` then sign in again (role lives in the JWT).
+  - Provider categories use a plain `@ManyToMany` join table (`provider_service_categories`),
+    not a hand-written join entity. `postcodeCoverage` is a text[]; availability is replaced
+    wholesale on `PATCH /provider/profile`.
+  - Approve requires all 5 document types uploaded; approve/reject stamps every document
+    APPROVED/REJECTED (no per-document review endpoint - add if admins need it). Re-uploading
+    a document resets it to PENDING and moves a REJECTED provider back to PENDING.
+  - Approve allowed from PENDING or DISABLED (that's the re-enable path); reject only from
+    PENDING; disable only from APPROVED.
+  - Document uploads (JPEG/PNG/PDF, 5 MB) go to Cloudinary; verified live except the final
+    upload call, which needs real `CLOUDINARY_*` keys (returns 500 without them).
 
 ## Conventions
 

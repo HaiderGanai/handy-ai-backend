@@ -133,6 +133,8 @@ Covers spec §5, §5.1.
 
 **Done when:** a provider can onboard + upload docs, and an admin can list/approve/reject/disable them.
 
+✅ Done 2026-10-09 - see `PHASE_3_API.md`. Deviations: sign-up accepts `role` (CUSTOMER|PROVIDER); categories via `@ManyToMany` join table; added `rejectionReason`; approve needs all 5 docs.
+
 ---
 
 ## Phase 4 — Bookings

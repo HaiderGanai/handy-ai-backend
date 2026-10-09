@@ -1,4 +1,11 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
+import { Role } from '../../user/enums/role.enum';
 
 export class SignUpDto {
   @IsEmail()
@@ -10,4 +17,9 @@ export class SignUpDto {
 
   @IsString()
   fullName: string;
+
+  // ADMIN is never self-assignable; admins are promoted directly in the database
+  @IsOptional()
+  @IsIn([Role.CUSTOMER, Role.PROVIDER])
+  role?: Role;
 }

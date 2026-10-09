@@ -18,6 +18,7 @@ import { CacheKeys } from '../common/cache-keys';
 import { MailService } from '../mail/mail.service';
 import { RedisService } from '../redis/redis.service';
 import { OtpPurpose } from '../user/enums/otp-purpose.enum';
+import { Role } from '../user/enums/role.enum';
 import { User } from '../user/entities/user.entity';
 import { UserSession } from '../user/entities/user-session.entity';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -66,6 +67,7 @@ export class AuthService {
       email,
       password: hashedPassword,
       fullName: data.fullName,
+      role: data.role ?? Role.CUSTOMER,
     });
     await this.userRepository.save(user);
 
