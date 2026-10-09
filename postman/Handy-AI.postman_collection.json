@@ -1,13 +1,25 @@
 {
   "info": {
-    "name": "Handy AI — Phase 1 (Auth & User Profile)",
+    "name": "Handy AI \u2014 Phase 1 (Auth & User Profile)",
     "description": "Phase 1 endpoints: email OTP sign-up/sign-in, forgot/reset password, logout, and guarded user profile read/update/photo upload. See PHASE_1_NOTES.md for the flow explanation and PLAN.md/CLAUDE.md for project context.\n\nSet the `baseUrl` collection variable if your server isn't on the default. Run \"Sign In\" once to auto-populate `accessToken` for every guarded request below it.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:3000/api/v1", "type": "string" },
-    { "key": "accessToken", "value": "", "type": "string" },
-    { "key": "resetToken", "value": "", "type": "string" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "resetToken",
+      "value": "",
+      "type": "string"
+    }
   ],
   "item": [
     {
@@ -18,18 +30,39 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
           },
           "response": [
             {
               "name": "200 OK",
               "originalRequest": {
                 "method": "GET",
-                "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+                "url": {
+                  "raw": "{{baseUrl}}/health",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health"
+                  ]
+                }
               },
               "status": "OK",
               "code": 200,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"status\": \"ok\"\n}"
             }
           ]
@@ -43,13 +76,31 @@
           "name": "Sign Up",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"jane@example.com\",\n  \"password\": \"password123\",\n  \"fullName\": \"Jane Doe\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": { "raw": "{{baseUrl}}/auth/sign-up", "host": ["{{baseUrl}}"], "path": ["auth", "sign-up"] },
+            "url": {
+              "raw": "{{baseUrl}}/auth/sign-up",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "sign-up"
+              ]
+            },
             "description": "Creates an unverified user and emails a 5-digit OTP. Same email twice -> 409."
           },
           "response": [
@@ -57,34 +108,49 @@
               "name": "201 Created",
               "status": "Created",
               "code": 201,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"Verification code sent to your email!\"\n}"
             },
             {
-              "name": "409 Conflict — email already registered",
+              "name": "409 Conflict \u2014 email already registered",
               "status": "Conflict",
               "code": 409,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"User Already Exists!\",\n  \"error\": \"Conflict\",\n  \"statusCode\": 409\n}"
             },
             {
-              "name": "400 Bad Request — validation",
+              "name": "400 Bad Request \u2014 validation",
               "status": "Bad Request",
               "code": 400,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": [\"email must be an email\"],\n  \"error\": \"Bad Request\",\n  \"statusCode\": 400\n}"
             }
           ]
         },
         {
-          "name": "Verify OTP — Sign Up",
+          "name": "Verify OTP \u2014 Sign Up",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// no token to capture here — signup verification doesn't log you in,",
+                  "// no token to capture here \u2014 signup verification doesn't log you in,",
                   "// it only flips isEmailVerified. Sign in separately afterward."
                 ]
               }
@@ -92,35 +158,68 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"jane@example.com\",\n  \"code\": \"12345\",\n  \"purpose\": \"SIGNUP\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": { "raw": "{{baseUrl}}/auth/verify-otp", "host": ["{{baseUrl}}"], "path": ["auth", "verify-otp"] },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "verify-otp"
+              ]
+            },
             "description": "Replace `code` with whatever arrived by email. Wrong code, wrong purpose, or expired code all return the same generic error. More than 5 wrong attempts within 15 minutes locks out until a fresh code is requested (resend-otp)."
           },
           "response": [
             {
-              "name": "201 Created — verified",
+              "name": "201 Created \u2014 verified",
               "status": "Created",
               "code": 201,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"Email verified successfully!\"\n}"
             },
             {
-              "name": "400 Bad Request — wrong/expired code",
+              "name": "400 Bad Request \u2014 wrong/expired code",
               "status": "Bad Request",
               "code": 400,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"Invalid or Expired OTP!\",\n  \"error\": \"Bad Request\",\n  \"statusCode\": 400\n}"
             },
             {
-              "name": "400 Bad Request — too many attempts",
+              "name": "400 Bad Request \u2014 too many attempts",
               "status": "Bad Request",
               "code": 400,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"Too many attempts. Please request a new code!\",\n  \"error\": \"Bad Request\",\n  \"statusCode\": 400\n}"
             }
           ]
@@ -129,21 +228,44 @@
           "name": "Resend OTP",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"jane@example.com\",\n  \"purpose\": \"SIGNUP\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": { "raw": "{{baseUrl}}/auth/resend-otp", "host": ["{{baseUrl}}"], "path": ["auth", "resend-otp"] },
-            "description": "Same response whether or not the email exists, or is already verified — no account enumeration. purpose can be SIGNUP or RESET_PASSWORD."
+            "url": {
+              "raw": "{{baseUrl}}/auth/resend-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "resend-otp"
+              ]
+            },
+            "description": "Same response whether or not the email exists, or is already verified \u2014 no account enumeration. purpose can be SIGNUP or RESET_PASSWORD."
           },
           "response": [
             {
               "name": "201 Created",
               "status": "Created",
               "code": 201,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"If an account exists, a verification code has been sent!\"\n}"
             }
           ]
@@ -166,13 +288,31 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"jane@example.com\",\n  \"password\": \"password123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": { "raw": "{{baseUrl}}/auth/sign-in", "host": ["{{baseUrl}}"], "path": ["auth", "sign-in"] },
+            "url": {
+              "raw": "{{baseUrl}}/auth/sign-in",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "sign-in"
+              ]
+            },
             "description": "Must be verified first. Saves accessToken into the collection variable on success so the requests below work without manual copy-pasting."
           },
           "response": [
@@ -180,21 +320,36 @@
               "name": "201 Created",
               "status": "Created",
               "code": 201,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"user\": {\n    \"id\": \"8f046014-901e-4794-8e89-310a90b18349\",\n    \"email\": \"jane@example.com\",\n    \"role\": \"CUSTOMER\",\n    \"isEmailVerified\": true,\n    \"fullName\": \"Jane Doe\",\n    \"address\": null,\n    \"postcode\": null,\n    \"photoUrl\": null,\n    \"householdNotes\": null,\n    \"createdAt\": \"2026-10-06T08:31:41.194Z\",\n    \"updatedAt\": \"2026-10-06T08:33:31.522Z\"\n  },\n  \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"\n}"
             },
             {
-              "name": "401 Unauthorized — wrong password / no such user",
+              "name": "401 Unauthorized \u2014 wrong password / no such user",
               "status": "Unauthorized",
               "code": 401,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"Invalid credentials!\",\n  \"error\": \"Unauthorized\",\n  \"statusCode\": 401\n}"
             },
             {
-              "name": "403 Forbidden — not verified yet",
+              "name": "403 Forbidden \u2014 not verified yet",
               "status": "Forbidden",
               "code": 403,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"Please verify your email first!\",\n  \"error\": \"Forbidden\",\n  \"statusCode\": 403\n}"
             }
           ]
@@ -203,13 +358,31 @@
           "name": "Forgot Password",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"jane@example.com\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": { "raw": "{{baseUrl}}/auth/forgot-password", "host": ["{{baseUrl}}"], "path": ["auth", "forgot-password"] },
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
+            },
             "description": "Same response whether or not the email is registered."
           },
           "response": [
@@ -217,13 +390,18 @@
               "name": "201 Created",
               "status": "Created",
               "code": 201,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"If an account exists, a verification code has been sent!\"\n}"
             }
           ]
         },
         {
-          "name": "Verify OTP — Reset Password",
+          "name": "Verify OTP \u2014 Reset Password",
           "event": [
             {
               "listen": "test",
@@ -242,21 +420,44 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"jane@example.com\",\n  \"code\": \"12345\",\n  \"purpose\": \"RESET_PASSWORD\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": { "raw": "{{baseUrl}}/auth/verify-otp", "host": ["{{baseUrl}}"], "path": ["auth", "verify-otp"] },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "verify-otp"
+              ]
+            },
             "description": "Replace `code` with the one emailed for the reset flow. On success this saves the one-time resetToken into the collection variable for the next request."
           },
           "response": [
             {
-              "name": "201 Created — reset token issued",
+              "name": "201 Created \u2014 reset token issued",
               "status": "Created",
               "code": 201,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"OTP verified!\",\n  \"resetToken\": \"f8ba460d303a524fc51b80ef18efa41031e2ac963db0d22f673c1acb69b86923\"\n}"
             }
           ]
@@ -265,13 +466,31 @@
           "name": "Reset Password",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"resetToken\": \"{{resetToken}}\",\n  \"newPassword\": \"newpassword456\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": { "raw": "{{baseUrl}}/auth/reset-password", "host": ["{{baseUrl}}"], "path": ["auth", "reset-password"] },
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password"
+              ]
+            },
             "description": "resetToken is single-use and expires 15 minutes after being issued. Also invalidates any existing session for that user."
           },
           "response": [
@@ -279,14 +498,24 @@
               "name": "201 Created",
               "status": "Created",
               "code": 201,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"Password reset successfully!\"\n}"
             },
             {
-              "name": "400 Bad Request — invalid/expired token",
+              "name": "400 Bad Request \u2014 invalid/expired token",
               "status": "Bad Request",
               "code": 400,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"Invalid or Expired Reset Token!\",\n  \"error\": \"Bad Request\",\n  \"statusCode\": 400\n}"
             }
           ]
@@ -296,16 +525,38 @@
           "request": {
             "method": "POST",
             "header": [],
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
-            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] },
-            "description": "Deletes the session (DB row + Redis key) — the accessToken stops working immediately, before its JWT expiry."
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Deletes the session (DB row + Redis key) \u2014 the accessToken stops working immediately, before its JWT expiry."
           },
           "response": [
             {
               "name": "201 Created",
               "status": "Created",
               "code": 201,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"Logged out successfully!\"\n}"
             }
           ]
@@ -320,22 +571,49 @@
           "request": {
             "method": "GET",
             "header": [],
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
-            "url": { "raw": "{{baseUrl}}/user/profile", "host": ["{{baseUrl}}"], "path": ["user", "profile"] }
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/user/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "user",
+                "profile"
+              ]
+            }
           },
           "response": [
             {
               "name": "200 OK",
               "status": "OK",
               "code": 200,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"id\": \"8f046014-901e-4794-8e89-310a90b18349\",\n  \"email\": \"jane@example.com\",\n  \"role\": \"CUSTOMER\",\n  \"isEmailVerified\": true,\n  \"fullName\": \"Jane Doe\",\n  \"address\": \"221B Baker Street\",\n  \"postcode\": \"NW1 6XF\",\n  \"photoUrl\": null,\n  \"householdNotes\": \"Key under the mat, code 4321\",\n  \"createdAt\": \"2026-10-06T08:31:41.194Z\",\n  \"updatedAt\": \"2026-10-06T08:36:30.196Z\"\n}"
             },
             {
-              "name": "401 Unauthorized — missing/invalid/expired token",
+              "name": "401 Unauthorized \u2014 missing/invalid/expired token",
               "status": "Unauthorized",
               "code": 401,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"message\": \"Unauthorized\",\n  \"statusCode\": 401\n}"
             }
           ]
@@ -344,22 +622,53 @@
           "name": "Update Profile",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}"
+                }
+              ]
+            },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"address\": \"221B Baker Street\",\n  \"postcode\": \"NW1 6XE\",\n  \"householdNotes\": \"Key under the mat, code 4321\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": { "raw": "{{baseUrl}}/user/profile", "host": ["{{baseUrl}}"], "path": ["user", "profile"] },
-            "description": "All fields optional — only send what changed. Fields you omit are left untouched (this was a real bug in early Phase 1, since fixed — see PHASE_1_NOTES.md)."
+            "url": {
+              "raw": "{{baseUrl}}/user/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "user",
+                "profile"
+              ]
+            },
+            "description": "All fields optional \u2014 only send what changed. Fields you omit are left untouched (this was a real bug in early Phase 1, since fixed \u2014 see PHASE_1_NOTES.md)."
           },
           "response": [
             {
               "name": "200 OK",
               "status": "OK",
               "code": 200,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"id\": \"8f046014-901e-4794-8e89-310a90b18349\",\n  \"email\": \"jane@example.com\",\n  \"role\": \"CUSTOMER\",\n  \"isEmailVerified\": true,\n  \"fullName\": \"Jane Doe\",\n  \"address\": \"221B Baker Street\",\n  \"postcode\": \"NW1 6XE\",\n  \"photoUrl\": null,\n  \"householdNotes\": \"Key under the mat, code 4321\",\n  \"createdAt\": \"2026-10-06T08:31:41.194Z\",\n  \"updatedAt\": \"2026-10-06T08:36:30.196Z\"\n}"
             }
           ]
@@ -369,28 +678,111 @@
           "request": {
             "method": "POST",
             "header": [],
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}" }] },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}"
+                }
+              ]
+            },
             "body": {
               "mode": "formdata",
-              "formdata": [{ "key": "photo", "type": "file", "src": [] }]
+              "formdata": [
+                {
+                  "key": "photo",
+                  "type": "file",
+                  "src": []
+                }
+              ]
             },
-            "url": { "raw": "{{baseUrl}}/user/profile/photo", "host": ["{{baseUrl}}"], "path": ["user", "profile", "photo"] },
-            "description": "multipart/form-data, field name must be `photo`. Uploads to Cloudinary and stores the returned secure_url. Will 500 until real CLOUDINARY_* keys are set in .env — the upload plumbing (multer, controller, service) is verified up to the point of the actual Cloudinary call."
+            "url": {
+              "raw": "{{baseUrl}}/user/profile/photo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "user",
+                "profile",
+                "photo"
+              ]
+            },
+            "description": "multipart/form-data, field name must be `photo`. Uploads to Cloudinary and stores the returned secure_url. Will 500 until real CLOUDINARY_* keys are set in .env \u2014 the upload plumbing (multer, controller, service) is verified up to the point of the actual Cloudinary call."
           },
           "response": [
             {
               "name": "200 OK",
               "status": "OK",
               "code": 200,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"id\": \"8f046014-901e-4794-8e89-310a90b18349\",\n  \"email\": \"jane@example.com\",\n  \"role\": \"CUSTOMER\",\n  \"isEmailVerified\": true,\n  \"fullName\": \"Jane Doe\",\n  \"address\": \"221B Baker Street\",\n  \"postcode\": \"NW1 6XE\",\n  \"photoUrl\": \"https://res.cloudinary.com/.../handy-ai/avatars/....jpg\",\n  \"householdNotes\": \"Key under the mat, code 4321\",\n  \"createdAt\": \"2026-10-06T08:31:41.194Z\",\n  \"updatedAt\": \"2026-10-06T08:40:00.000Z\"\n}"
             },
             {
-              "name": "500 — Cloudinary keys not configured yet",
+              "name": "500 \u2014 Cloudinary keys not configured yet",
               "status": "Internal Server Error",
               "code": 500,
-              "header": [{ "key": "Content-Type", "value": "application/json; charset=utf-8" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
               "body": "{\n  \"statusCode\": 500,\n  \"message\": \"Internal server error\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "item": [
+        {
+          "name": "List Service Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service-categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service-categories"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK (trimmed: 4 categories x 4 sub-services in reality)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/service-categories",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "service-categories"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"<uuid>\",\n    \"name\": \"Cleaning\",\n    \"slug\": \"cleaning\",\n    \"sortOrder\": 0,\n    \"subServices\": [\n      {\n        \"id\": \"<uuid>\",\n        \"categoryId\": \"<uuid>\",\n        \"name\": \"Regular home clean\",\n        \"slug\": \"regular-home-clean\",\n        \"basePriceCents\": 8000,\n        \"baseDurationMinutes\": 120,\n        \"sortOrder\": 0\n      },\n      {\n        \"id\": \"<uuid>\",\n        \"categoryId\": \"<uuid>\",\n        \"name\": \"Deep clean\",\n        \"slug\": \"deep-clean\",\n        \"basePriceCents\": 15000,\n        \"baseDurationMinutes\": 240,\n        \"sortOrder\": 1\n      }\n    ]\n  }\n]"
             }
           ]
         }

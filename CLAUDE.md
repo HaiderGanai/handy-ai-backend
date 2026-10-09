@@ -54,7 +54,7 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
 |---|---|---|
 | 0 | Project bootstrap (Nest app, TypeORM, config, global pipes, mail module) | Done |
 | 1 | Auth & user core (email OTP sign-up, sign-in, forgot/reset password, profile, household notes) | Done |
-| 2 | Service catalog (4 categories + sub-services, seeded) | Not started |
+| 2 | Service catalog (4 categories + sub-services, seeded) | Done |
 | 3 | Providers & vetting (onboarding, documents, admin approve/reject) | Not started |
 | 4 | Bookings (plan → confirm → accept/decline → complete, trusted providers) | Not started |
 | 5 | Payments (Stripe Connect, hold/release, 80/20 split) | Not started |
@@ -134,6 +134,23 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
     `UserService.updateProfile` by filtering `undefined` values out first. Worth
     remembering for *any* future DTO-merge-onto-entity code in this codebase,
     not just this one spot.
+
+- 2026-10-08 — Local dev DB moved from the Docker Postgres (5433, `handy_ai`) to the
+  system-wide Postgres: `localhost:5432`, database `HandyAi`. Credentials in `.env`.
+  Docker is now only needed for Redis (and Mailpit if used). Run migrations on the new DB.
+- 2026-10-08 — Phase 2 complete (service catalog). Writeups: `PHASE_2_MODULE_GUIDE.md`,
+  `PHASE_2_API.md`; Postman "Catalog" folder added. `GET /service-categories` is public.
+  - Prices are `basePriceCents` (int, USD cents), not `basePrice` as `PLAN.md` first
+    said - Stripe works in cents. Added `slug` (sub-services) and `sortOrder` (both).
+  - **Seed prices/durations are my placeholders** - the spec only names the services.
+    Needs the user's review before launch; change via a new migration, never by editing
+    the one that ran.
+  - Seeds live in the migration's `up()`, so `npm run migration:run` on any fresh DB
+    gives the full catalog. (A fresh DB needs migrations run - Phase 1 hit this when
+    the DB was swapped.)
+  - Gotcha: `migration:generate` output has no seed; a first attempt at injecting
+    seed code silently didn't match and the migration ran empty - always verify
+    seeded rows after running, not just "executed successfully".
 
 ## Conventions
 

@@ -108,6 +108,8 @@ Covers spec §2 (the 4 launch services) — needed as a lookup table before book
 
 **Done when:** seeded categories/sub-services are readable via the API.
 
+✅ Done 2026-10-08 — see `PHASE_2_MODULE_GUIDE.md` / `PHASE_2_API.md`. Deviations: price stored as `basePriceCents` (int cents); added `slug`/`sortOrder`; seed prices are placeholders.
+
 ---
 
 ## Phase 3 — Providers & Vetting

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppCacheModule } from './cache/app-cache.module';
 import { AuthModule } from './auth/auth.module';
+import { CatalogModule } from './catalog/catalog.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
@@ -19,6 +20,7 @@ import { UserModule } from './user/user.module';
     CloudinaryModule,
     UserModule,
     AuthModule,
+    CatalogModule,
   ],
   controllers: [HealthController],
 })
