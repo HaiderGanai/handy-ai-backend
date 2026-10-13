@@ -19,7 +19,7 @@ AI/OpenAI — all explicitly deferred per `CLAUDE.md`.
    stored on the user row, with an attempt cap (see below). On success, marks the
    account verified, clears the OTP fields immediately, and returns the same `{ user, accessToken }` as sign-in (no separate sign-in needed after sign-up).
 3. `POST /auth/sign-in` — only works once verified. Wrong password or unverified
-   account both fail with the right HTTP status (401 / 403).
+   account returns 401; an unverified account with the right password returns 201 `{ isEmailVerified: false, message }` and no token.
 4. Didn't get the code? `POST /auth/resend-otp` re-issues one. Same response whether
    or not the email is registered — no account enumeration.
 

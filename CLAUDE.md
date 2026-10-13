@@ -179,6 +179,11 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
   flows straight into a logged-in state. `RESET_PASSWORD` still returns `{ message,
   resetToken }`. Docs (`PHASE_1_API.md`, module guide, notes, `PHASE_3_API.md`),
   `PLAN.md` and Postman updated.
+- 2026-10-13 - Unverified email no longer errors: `POST /auth/sign-up` returns
+  `{ isEmailVerified: false, message }`, and `POST /auth/sign-in` returns the same
+  (201, no token) when the password is right but the email isn't verified. Verified
+  sign-in is unchanged (`user.isEmailVerified: true` in the body). Password is checked
+  first so verification state can't be probed. Admin sign-in rejects unverified with 401.
 
 ## Conventions
 

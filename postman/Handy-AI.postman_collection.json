@@ -129,7 +129,7 @@
                   "value": "application/json; charset=utf-8"
                 }
               ],
-              "body": "{\n  \"message\": \"Verification code sent to your email!\"\n}"
+              "body": "{\n  \"isEmailVerified\": false,\n  \"message\": \"Verification code sent to your email!\"\n}"
             },
             {
               "name": "409 Conflict \u2014 email already registered",
@@ -356,16 +356,16 @@
               "body": "{\n  \"message\": \"Invalid credentials!\",\n  \"error\": \"Unauthorized\",\n  \"statusCode\": 401\n}"
             },
             {
-              "name": "403 Forbidden \u2014 not verified yet",
-              "status": "Forbidden",
-              "code": 403,
+              "name": "201 Created \u2014 not verified yet",
+              "status": "Created",
+              "code": 201,
               "header": [
                 {
                   "key": "Content-Type",
                   "value": "application/json; charset=utf-8"
                 }
               ],
-              "body": "{\n  \"message\": \"Please verify your email first!\",\n  \"error\": \"Forbidden\",\n  \"statusCode\": 403\n}"
+              "body": "{\n  \"isEmailVerified\": false,\n  \"message\": \"Please verify your email first!\"\n}"
             }
           ]
         },

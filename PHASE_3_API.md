@@ -192,7 +192,7 @@ Body
 |---|---|
 | **201** | `{ "user": { ..., "role": "ADMIN" }, "accessToken": "<jwt>" }` |
 | 401 | `{ "message": "Invalid credentials!", "error": "Unauthorized", "statusCode": 401 }` |
-| 403 | `Please verify your email first!` (account not verified) |
+| 401 | also returned for an unverified account |
 
 Use the returned `accessToken` as `adminToken` in the endpoints below. Signing in replaces any
 previous session for that user (single active session).

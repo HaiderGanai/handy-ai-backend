@@ -113,9 +113,9 @@ previous one and resets the attempt counter.
 
 ### 4.4 Sign in — `POST /auth/sign-in`
 1. Unknown email → `401 Invalid credentials!`.
-2. Not verified → `403 Please verify your email first!`.
-3. bcrypt compare; mismatch → `401 Invalid credentials!`.
-4. `createSession`:
+2. bcrypt compare; mismatch → `401 Invalid credentials!`.
+3. Not verified → `201 { isEmailVerified: false, message }`, no session (checked after the password so it can't be probed).
+4. Verified → `createSession`:
    - `invalidateSessions(userId)` — deletes old DB rows and the old Redis key
      (**single active session**: a new login kicks out the previous one)
    - new `sid` = `randomUUID()`

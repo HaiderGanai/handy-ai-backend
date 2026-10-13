@@ -1,7 +1,6 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   ConflictException,
-  ForbiddenException,
   UnauthorizedException,
   BadRequestException,
 } from '@nestjs/common';
@@ -99,6 +98,7 @@ describe('AuthService', () => {
         expect.stringContaining('verification code'),
       );
       expect(result).toEqual({
+        isEmailVerified: false,
         message: 'Verification code sent to your email!',
       });
     });
@@ -179,15 +179,20 @@ describe('AuthService', () => {
   });
 
   describe('signIn', () => {
-    it('rejects an unverified user', async () => {
+    it('returns isEmailVerified: false for an unverified user with the right password', async () => {
       userRepository.findOne.mockResolvedValue({
         email: 'new@example.com',
+        password: await bcrypt.hash('password123', 10),
         isEmailVerified: false,
       });
 
-      await expect(
-        service.signIn({ email: 'new@example.com', password: 'password123' }),
-      ).rejects.toThrow(ForbiddenException);
+      const result = await service.signIn({
+        email: 'new@example.com',
+        password: 'password123',
+      });
+
+      expect(result).toMatchObject({ isEmailVerified: false });
+      expect(result).not.toHaveProperty('accessToken');
     });
 
     it('rejects an incorrect password', async () => {

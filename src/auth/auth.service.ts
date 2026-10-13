@@ -2,7 +2,6 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -32,6 +31,11 @@ import {
   AuthResponseService,
 } from './services/auth-response.service';
 
+type UnverifiedResponse = { isEmailVerified: false; message: string };
+const unverifiedResponse = (
+  message = 'Please verify your email first!',
+): UnverifiedResponse => ({ isEmailVerified: false, message });
+
 const OTP_TTL_MINUTES = 10;
 const RESET_TOKEN_TTL_MINUTES = 15;
 const MAX_OTP_ATTEMPTS = 5;
@@ -51,7 +55,7 @@ export class AuthService {
     private readonly authResponseService: AuthResponseService,
   ) {}
 
-  async signUp(data: SignUpDto): Promise<{ message: string }> {
+  async signUp(data: SignUpDto): Promise<UnverifiedResponse> {
     const email = data.email.trim().toLowerCase();
 
     //check if email already exists
@@ -72,7 +76,7 @@ export class AuthService {
     await this.userRepository.save(user);
 
     await this.generateAndSendOtp(user, OtpPurpose.SIGNUP);
-    return { message: 'Verification code sent to your email!' };
+    return unverifiedResponse('Verification code sent to your email!');
   }
 
   async verifyOtp(
@@ -144,12 +148,20 @@ export class AuthService {
     };
   }
 
-  async signIn(data: SignInDto, userAgent?: string): Promise<AuthResponse> {
+  async signIn(
+    data: SignInDto,
+    userAgent?: string,
+  ): Promise<AuthResponse | UnverifiedResponse> {
     const user = await this.verifyCredentials(data);
 
     //admins sign in through their own endpoint only
     if (user.role === Role.ADMIN) {
       throw new UnauthorizedException('Invalid credentials!');
+    }
+
+    //correct password but no verified email yet — client sends the user to the OTP screen
+    if (!user.isEmailVerified) {
+      return unverifiedResponse();
     }
 
     return this.createSession(user, userAgent);
@@ -161,7 +173,7 @@ export class AuthService {
   ): Promise<AuthResponse> {
     const user = await this.verifyCredentials(data);
 
-    if (user.role !== Role.ADMIN) {
+    if (user.role !== Role.ADMIN || !user.isEmailVerified) {
       throw new UnauthorizedException('Invalid credentials!');
     }
 
@@ -244,9 +256,6 @@ export class AuthService {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials!');
-    }
-    if (!user.isEmailVerified) {
-      throw new ForbiddenException('Please verify your email first!');
     }
 
     const passwordMatches = await bcrypt.compare(data.password, user.password);

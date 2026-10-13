@@ -53,7 +53,7 @@ The role is fixed at sign-up and travels in the JWT. See `PHASE_3_API.md`.
 
 | Status | Body |
 |---|---|
-| **201** | `{ "message": "Verification code sent to your email!" }` |
+| **201** | `{ "isEmailVerified": false, "message": "Verification code sent to your email!" }` |
 | 409 | `{ "message": "User Already Exists!", "error": "Conflict", "statusCode": 409 }` |
 | 400 | `{ "message": ["email must be an email"], "error": "Bad Request", "statusCode": 400 }` (also: `password must be longer than or equal to 8 characters`) |
 
@@ -117,7 +117,7 @@ pm.collectionVariables.set("accessToken", pm.response.json().accessToken);
 |---|---|
 | **201** | see below |
 | 401 | `{ "message": "Invalid credentials!", "error": "Unauthorized", "statusCode": 401 }` (unknown email **or** wrong password) |
-| 403 | `{ "message": "Please verify your email first!", "error": "Forbidden", "statusCode": 403 }` |
+| **201** | correct password but email not verified: `{ "isEmailVerified": false, "message": "Please verify your email first!" }` — no `accessToken`; send the user to verify-otp (resend-otp if the code expired) |
 
 **201 body**
 ```json
@@ -271,7 +271,7 @@ Uploads to Cloudinary folder `handy-ai/avatars`.
 
 | Scenario | Expected |
 |---|---|
-| Sign in before verifying | 403 `Please verify your email first!` |
+| Sign in before verifying | 201 `{ "isEmailVerified": false, "message": "Please verify your email first!" }` (no token) |
 | 6th wrong OTP within 15 min | 400 `Too many attempts…` until a new code is requested |
 | Sign in twice, use the first token | 401 `Session expired…` (single active session) |
 | Use token after logout | 401 `Session expired…` |
