@@ -211,7 +211,7 @@
                   "value": "application/json; charset=utf-8"
                 }
               ],
-              "body": "{\n  \"message\": \"Email verified successfully!\"\n}"
+              "body": "{\n  \"user\": {\n    \"id\": \"8f046014-901e-4794-8e89-310a90b18349\",\n    \"email\": \"jane@example.com\",\n    \"role\": \"CUSTOMER\",\n    \"isEmailVerified\": true,\n    \"fullName\": \"Jane Doe\"\n  },\n  \"accessToken\": \"<jwt>\"\n}"
             },
             {
               "name": "400 Bad Request \u2014 wrong/expired code",

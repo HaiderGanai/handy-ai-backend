@@ -17,7 +17,7 @@ AI/OpenAI — all explicitly deferred per `CLAUDE.md`.
    emails it, and returns a generic "code sent" message.
 2. `POST /auth/verify-otp` with `purpose: SIGNUP` — checks the code against what's
    stored on the user row, with an attempt cap (see below). On success, marks the
-   account verified and clears the OTP fields immediately.
+   account verified, clears the OTP fields immediately, and returns the same `{ user, accessToken }` as sign-in (no separate sign-in needed after sign-up).
 3. `POST /auth/sign-in` — only works once verified. Wrong password or unverified
    account both fail with the right HTTP status (401 / 403).
 4. Didn't get the code? `POST /auth/resend-otp` re-issues one. Same response whether

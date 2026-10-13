@@ -70,7 +70,7 @@ Covers spec §4.1 (Sign Up, User Profile, Household Notes) minus phone OTP.
 
 **Endpoints** (`AuthController` at `auth`, `UserController` at `user`)
 - `POST /auth/sign-up` — email+password+fullName → creates unverified `User`, issues OTP, emails it via `MailService`, returns `{ message }`.
-- `POST /auth/verify-otp` — email+code+purpose → verifies, clears OTP fields, marks verified (for SIGNUP) or allows password reset (for RESET_PASSWORD) by issuing a short-lived reset token.
+- `POST /auth/verify-otp` — email+code+purpose → verifies, clears OTP fields, marks verified and returns a JWT session like sign-in (for SIGNUP) or allows password reset (for RESET_PASSWORD) by issuing a short-lived reset token.
 - `POST /auth/resend-otp` — same response whether or not the email exists/is already verified (no enumeration, per `GUIDE.md` §5).
 - `POST /auth/sign-in` — email+password, must be verified → `AuthResponse` (JWT + user).
 - `POST /auth/forgot-password` — email → issues OTP (purpose `RESET_PASSWORD`), same non-enumerating response.

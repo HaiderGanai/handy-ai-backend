@@ -120,7 +120,7 @@ describe('AuthService', () => {
   });
 
   describe('verifyOtp', () => {
-    it('marks a SIGNUP user verified on a correct code', async () => {
+    it('marks a SIGNUP user verified and returns a JWT on a correct code', async () => {
       userRepository.findOne.mockResolvedValue({
         email: 'new@example.com',
         otpCode: '12345',
@@ -135,7 +135,10 @@ describe('AuthService', () => {
         purpose: OtpPurpose.SIGNUP,
       });
 
-      expect(result).toEqual({ message: 'Email verified successfully!' });
+      expect(result).toHaveProperty('accessToken');
+      expect(userRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ isEmailVerified: true }),
+      );
       expect(redisService.delete).toHaveBeenCalled();
     });
 

@@ -102,7 +102,7 @@ Global setup lives in `src/main.ts`:
    Otherwise `400 Invalid or Expired OTP!` (same message for every failure reason).
 3. On success the OTP fields are nulled and the attempt counter deleted (single use).
 4. Branch on `purpose`:
-   - `SIGNUP` → `isEmailVerified = true`, return a message.
+   - `SIGNUP` → `isEmailVerified = true`, start a session and return `{ user, accessToken }` (same as sign-in).
    - `RESET_PASSWORD` → generate 32 random bytes (hex), store only its sha256 hash +
      15-minute expiry, return the **raw** token once in the response.
 

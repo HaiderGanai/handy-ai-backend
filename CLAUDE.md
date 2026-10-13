@@ -174,6 +174,11 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
     (1-5 files per request, one per type), not a `type` field + one file.
   - Document uploads (JPEG/PNG/PDF, 5 MB each) go to Cloudinary; verified live except the final
     upload call, which needs real `CLOUDINARY_*` keys (returns 500 without them).
+- 2026-10-13 - `POST /auth/verify-otp` with `purpose: SIGNUP` now returns the sign-in
+  shape (`{ user, accessToken }`, session started) instead of a message, so sign-up
+  flows straight into a logged-in state. `RESET_PASSWORD` still returns `{ message,
+  resetToken }`. Docs (`PHASE_1_API.md`, module guide, notes, `PHASE_3_API.md`),
+  `PLAN.md` and Postman updated.
 
 ## Conventions
 

@@ -19,9 +19,9 @@ Conventions
 
 **Provider:**
 1. `POST /auth/sign-up` with `"role": "PROVIDER"` (see `PHASE_1_API.md`)
-2. `POST /auth/verify-otp` with `purpose: "SIGNUP"` and the emailed code
-3. `POST /auth/sign-in` — response has `accessToken` and `user.role = "PROVIDER"`
-4. `POST /provider/onboarding`, then `POST /provider/documents`; wait for an admin.
+2. `POST /auth/verify-otp` with `purpose: "SIGNUP"` and the emailed code — response has
+   `accessToken` and `user.role = "PROVIDER"` (later sessions: `POST /auth/sign-in`)
+3. `POST /provider/onboarding`, then `POST /provider/documents`; wait for an admin.
 
 **Admin:** there is no sign-up for admins. Create the account directly in the database
 (`role = 'ADMIN'`, `isEmailVerified = true`, bcrypt-hashed password), or promote an existing

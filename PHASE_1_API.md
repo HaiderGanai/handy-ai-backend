@@ -73,7 +73,7 @@ Max 5 attempts per 15 min per email.
 
 | Status | Body |
 |---|---|
-| **201** | `{ "message": "Email verified successfully!" }` |
+| **201** | same body as sign-in: `{ "user": {…}, "accessToken": "<jwt>" }` — verifying a sign-up logs the user in (starts a session) |
 | 400 | `{ "message": "Invalid or Expired OTP!", "error": "Bad Request", "statusCode": 400 }` |
 | 400 | `{ "message": "Too many attempts. Please request a new code!", "error": "Bad Request", "statusCode": 400 }` |
 

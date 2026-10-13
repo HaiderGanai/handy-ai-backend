@@ -77,7 +77,8 @@ export class AuthService {
 
   async verifyOtp(
     data: VerifyOtpDto,
-  ): Promise<{ message: string; resetToken?: string }> {
+    userAgent?: string,
+  ): Promise<AuthResponse | { message: string; resetToken: string }> {
     const email = data.email.trim().toLowerCase();
 
     //cap verify attempts so a code can't be brute-forced
@@ -112,7 +113,8 @@ export class AuthService {
     if (data.purpose === OtpPurpose.SIGNUP) {
       user.isEmailVerified = true;
       await this.userRepository.save(user);
-      return { message: 'Email verified successfully!' };
+      //verified sign-up logs the user straight in
+      return this.createSession(user, userAgent);
     }
 
     //RESET_PASSWORD: issue a short-lived reset token, store only its hash
