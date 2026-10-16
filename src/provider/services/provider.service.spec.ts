@@ -85,6 +85,13 @@ describe('ProviderService', () => {
     );
   });
 
+  it('rejects a non-multipart upload (files undefined) with 400, not a crash', async () => {
+    // multer leaves req.files undefined when the request is not multipart/form-data
+    await expect(
+      service.uploadDocuments('u1', undefined as never),
+    ).rejects.toThrow(BadRequestException);
+  });
+
   it('rejects disallowed document file types', async () => {
     const file = { mimetype: 'text/html' } as Express.Multer.File;
     await expect(

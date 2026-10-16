@@ -98,8 +98,8 @@ export class ProviderService {
     userId: string,
     files: Partial<Record<DocumentType, Express.Multer.File[]>>,
   ): Promise<ProviderDocument[]> {
-    //the field name of each file is its document type
-    const uploads = Object.entries(files).map(([type, [file]]) => ({
+    //the field name of each file is its document type; `files` is undefined when the request isn't multipart
+    const uploads = Object.entries(files ?? {}).map(([type, [file]]) => ({
       type: type as DocumentType,
       file,
     }));
