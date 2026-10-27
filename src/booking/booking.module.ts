@@ -8,6 +8,7 @@ import { BookingController } from './booking.controller';
 import { Booking } from './entities/booking.entity';
 import { TrustedProvider } from './entities/trusted-provider.entity';
 import { BookingPlanService } from './services/booking-plan.service';
+import { BookingService } from './services/booking.service';
 
 @Module({
   imports: [
@@ -21,6 +22,6 @@ import { BookingPlanService } from './services/booking-plan.service';
     NotificationsModule,
   ],
   controllers: [BookingController],
-  providers: [BookingPlanService],
+  providers: [BookingPlanService, BookingService],
 })
 export class BookingModule {}

@@ -1,0 +1,266 @@
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { Provider } from '../../provider/entities/provider.entity';
+import { User } from '../../user/entities/user.entity';
+import { Role } from '../../user/enums/role.enum';
+import { CreateBookingDto } from '../dto/create-booking.dto';
+import { ListBookingsQueryDto } from '../dto/list-bookings-query.dto';
+import { UpdateBookingDto } from '../dto/update-booking.dto';
+import { Booking } from '../entities/booking.entity';
+import { TrustedProvider } from '../entities/trusted-provider.entity';
+import { BookingStatus } from '../enums/booking-status.enum';
+import { assertInFuture } from '../eligibility';
+import { BookingPlanService } from './booking-plan.service';
+
+const EDITABLE_STATUSES = [
+  BookingStatus.PENDING_PROVIDER,
+  BookingStatus.CONFIRMED,
+];
+
+@Injectable()
+export class BookingService {
+  constructor(
+    @InjectRepository(Booking)
+    private readonly bookingRepository: Repository<Booking>,
+    @InjectRepository(Provider)
+    private readonly providerRepository: Repository<Provider>,
+    @InjectRepository(TrustedProvider)
+    private readonly trustedProviderRepository: Repository<TrustedProvider>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    private readonly bookingPlanService: BookingPlanService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
+
+  async createBooking(
+    userId: string,
+    data: CreateBookingDto,
+  ): Promise<Booking> {
+    assertInFuture(data.scheduledAt);
+    // price/duration come from the catalog, never from the client
+    const subService = await this.bookingPlanService.getSubService(
+      data.subServiceId,
+    );
+    const postcode = await this.bookingPlanService.getPostcode(userId);
+    const provider = await this.bookingPlanService.assertEligible(
+      data.providerId,
+      {
+        categoryId: subService.categoryId,
+        postcode,
+        scheduledAt: data.scheduledAt,
+        durationMinutes: subService.baseDurationMinutes,
+      },
+    );
+
+    // ponytail: check-then-insert, no lock; a Postgres exclusion constraint would close the race
+    const booking = await this.bookingRepository.save(
+      this.bookingRepository.create({
+        userId,
+        providerId: provider.id,
+        subServiceId: subService.id,
+        scheduledAt: data.scheduledAt,
+        durationMinutes: subService.baseDurationMinutes,
+        priceCents: subService.basePriceCents,
+        status: BookingStatus.PENDING_PROVIDER,
+        notes: data.notes ?? null,
+      }),
+    );
+    this.notificationsService.notify(provider.userId, 'BOOKING_REQUESTED', {
+      bookingId: booking.id,
+    });
+    return booking;
+  }
+
+  async acceptBooking(userId: string, id: string): Promise<Booking> {
+    return this.transitionAsProvider(
+      userId,
+      id,
+      BookingStatus.PENDING_PROVIDER,
+      BookingStatus.CONFIRMED,
+      'BOOKING_CONFIRMED',
+    );
+  }
+
+  async declineBooking(userId: string, id: string): Promise<Booking> {
+    return this.transitionAsProvider(
+      userId,
+      id,
+      BookingStatus.PENDING_PROVIDER,
+      BookingStatus.DECLINED,
+      'BOOKING_DECLINED',
+    );
+  }
+
+  async startBooking(userId: string, id: string): Promise<Booking> {
+    return this.transitionAsProvider(
+      userId,
+      id,
+      BookingStatus.CONFIRMED,
+      BookingStatus.IN_PROGRESS,
+      'BOOKING_STARTED',
+    );
+  }
+
+  async completeBooking(userId: string, id: string): Promise<Booking> {
+    // Phase 5: capture the PaymentIntent here (releases the hold + 80/20 split)
+    return this.transitionAsProvider(
+      userId,
+      id,
+      BookingStatus.IN_PROGRESS,
+      BookingStatus.COMPLETED,
+      'BOOKING_COMPLETED',
+    );
+  }
+
+  async updateBooking(
+    userId: string,
+    id: string,
+    data: UpdateBookingDto,
+  ): Promise<Booking> {
+    const booking = await this.getOwnedBooking(userId, id);
+    if (!EDITABLE_STATUSES.includes(booking.status)) {
+      throw new ConflictException('Only upcoming bookings can be edited!');
+    }
+
+    if (
+      data.scheduledAt !== undefined &&
+      data.scheduledAt.getTime() !== booking.scheduledAt.getTime()
+    ) {
+      assertInFuture(data.scheduledAt);
+      const subService = await this.bookingPlanService.getSubService(
+        booking.subServiceId,
+      );
+      const postcode = await this.bookingPlanService.getPostcode(userId);
+      await this.bookingPlanService.assertEligible(booking.providerId, {
+        categoryId: subService.categoryId,
+        postcode,
+        scheduledAt: data.scheduledAt,
+        durationMinutes: booking.durationMinutes,
+        excludeBookingId: booking.id,
+      });
+      booking.scheduledAt = data.scheduledAt;
+      // the provider has to re-accept the new time
+      booking.status = BookingStatus.PENDING_PROVIDER;
+    }
+    if (data.notes !== undefined) {
+      booking.notes = data.notes;
+    }
+
+    const saved = await this.bookingRepository.save(booking);
+    this.notificationsService.notify(
+      booking.provider.userId,
+      'BOOKING_UPDATED',
+      { bookingId: booking.id },
+    );
+    return saved;
+  }
+
+  async cancelBooking(userId: string, id: string): Promise<Booking> {
+    const booking = await this.getOwnedBooking(userId, id);
+    if (!EDITABLE_STATUSES.includes(booking.status)) {
+      throw new ConflictException('Only upcoming bookings can be cancelled!');
+    }
+    booking.status = BookingStatus.CANCELLED;
+    const saved = await this.bookingRepository.save(booking);
+    this.notificationsService.notify(
+      booking.provider.userId,
+      'BOOKING_CANCELLED',
+      { bookingId: booking.id },
+    );
+    return saved;
+  }
+
+  async listBookings(
+    userId: string,
+    role: Role,
+    query: ListBookingsQueryDto,
+  ): Promise<Booking[]> {
+    const owner =
+      role === Role.PROVIDER
+        ? { providerId: (await this.getProviderForUser(userId)).id }
+        : { userId };
+    return this.bookingRepository.find({
+      where: { ...owner, ...(query.status ? { status: query.status } : {}) },
+      relations: { subService: true },
+      order: { scheduledAt: 'ASC' },
+    });
+  }
+
+  async getBooking(userId: string, role: Role, id: string) {
+    const booking = await this.bookingRepository.findOne({
+      where: { id },
+      relations: { provider: true, subService: true },
+    });
+    const isOwner = booking?.userId === userId;
+    const isAssignedProvider =
+      role === Role.PROVIDER && booking?.provider.userId === userId;
+    if (!booking || !(isOwner || isAssignedProvider || role === Role.ADMIN)) {
+      throw new NotFoundException('Booking not found!');
+    }
+
+    // household notes go to the assigned provider only, read live (not copied onto the booking)
+    let householdNotes: string | null | undefined;
+    if (isAssignedProvider) {
+      const customer = await this.userRepository.findOne({
+        where: { id: booking.userId },
+        select: { id: true, householdNotes: true },
+      });
+      householdNotes = customer?.householdNotes ?? null;
+    }
+    return { ...booking, householdNotes };
+  }
+
+  private async transitionAsProvider(
+    userId: string,
+    id: string,
+    from: BookingStatus,
+    to: BookingStatus,
+    event: string,
+  ): Promise<Booking> {
+    const provider = await this.getProviderForUser(userId);
+    const booking = await this.bookingRepository.findOne({
+      where: { id, providerId: provider.id },
+    });
+    if (!booking) {
+      throw new NotFoundException('Booking not found!');
+    }
+    if (booking.status !== from) {
+      throw new ConflictException(
+        `Booking is ${booking.status}, expected ${from}!`,
+      );
+    }
+    booking.status = to;
+    const saved = await this.bookingRepository.save(booking);
+    this.notificationsService.notify(booking.userId, event, {
+      bookingId: booking.id,
+    });
+    return saved;
+  }
+
+  private async getProviderForUser(userId: string): Promise<Provider> {
+    const provider = await this.providerRepository.findOne({
+      where: { userId },
+    });
+    if (!provider) {
+      throw new NotFoundException('Provider profile not found!');
+    }
+    return provider;
+  }
+
+  private async getOwnedBooking(userId: string, id: string): Promise<Booking> {
+    const booking = await this.bookingRepository.findOne({
+      where: { id, userId },
+      relations: { provider: true },
+    });
+    if (!booking) {
+      throw new NotFoundException('Booking not found!');
+    }
+    return booking;
+  }
+}
