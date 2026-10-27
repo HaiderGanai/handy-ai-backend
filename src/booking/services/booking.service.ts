@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -214,6 +215,25 @@ export class BookingService {
       householdNotes = customer?.householdNotes ?? null;
     }
     return { ...booking, householdNotes };
+  }
+
+  async addTrustedProvider(
+    userId: string,
+    providerId: string,
+  ): Promise<{ message: string }> {
+    const hasCompletedJob = await this.bookingRepository.exists({
+      where: { userId, providerId, status: BookingStatus.COMPLETED },
+    });
+    if (!hasCompletedJob) {
+      throw new ForbiddenException(
+        'You can only trust a provider after a completed job!',
+      );
+    }
+    await this.trustedProviderRepository.upsert({ userId, providerId }, [
+      'userId',
+      'providerId',
+    ]);
+    return { message: 'Provider marked as trusted!' };
   }
 
   private async transitionAsProvider(

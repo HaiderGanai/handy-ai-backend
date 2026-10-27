@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -222,6 +226,25 @@ describe('BookingService', () => {
       await expect(
         service.getBooking('pu9', Role.PROVIDER, 'b1'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('addTrustedProvider', () => {
+    it('requires a completed job with that provider', async () => {
+      bookingRepo.exists.mockResolvedValue(false);
+      await expect(service.addTrustedProvider('c1', 'p1')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(trustedRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('upserts so marking twice is harmless', async () => {
+      bookingRepo.exists.mockResolvedValue(true);
+      await service.addTrustedProvider('c1', 'p1');
+      expect(trustedRepo.upsert).toHaveBeenCalledWith(
+        { userId: 'c1', providerId: 'p1' },
+        ['userId', 'providerId'],
+      );
     });
   });
 });
