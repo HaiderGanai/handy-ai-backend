@@ -56,7 +56,7 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
 | 1 | Auth & user core (email OTP sign-up, sign-in, forgot/reset password, profile, household notes) | Done |
 | 2 | Service catalog (4 categories + sub-services, seeded) | Done |
 | 3 | Providers & vetting (onboarding, documents, admin approve/reject) | Done |
-| 4 | Bookings (plan → confirm → accept/decline → complete, trusted providers) | Not started |
+| 4 | Bookings (plan → confirm → accept/decline → start → complete, trusted providers) | Done |
 | 5 | Payments (Stripe Connect, hold/release, 80/20 split) | Not started |
 | 6 | In-app messaging (per booking, user↔provider) | Not started |
 | 7 | Notifications (FCM-ready interface, no-op impl for now) & contact support | Not started |
@@ -184,6 +184,37 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
   (201, no token) when the password is right but the email isn't verified. Verified
   sign-in is unchanged (`user.isEmailVerified: true` in the body). Password is checked
   first so verification state can't be probed. Admin sign-in rejects unverified with 401.
+- 2026-10-16 - Added `LoggingMiddleware` (one log line per request: method, path without
+  query string, status, ms; never bodies) and a global `AllExceptionsFilter` (every error
+  is `{ statusCode, error, message, path, timestamp }`; unknown errors become a generic 500
+  and the real stack goes only to the server log). Both in `src/common/`.
+- 2026-10-16 - `POST /provider/documents` returned 500 when the request wasn't
+  multipart/form-data (multer leaves `files` undefined); now a 400. Providers must
+  `POST /provider/onboarding` before `GET /provider/profile` or document upload work
+  (sign-up as PROVIDER only creates the user).
+- 2026-10-27 - Phase 4 complete (bookings). Writeups: `PHASE_4_MODULE_GUIDE.md`,
+  `PHASE_4_API.md`; Postman "Booking" folder + two Admin items added. Spec/plan:
+  `docs/superpowers/specs|plans/2026-10-14-phase-4-bookings*.md`.
+  - Added `POST /bookings/:id/start` (`CONFIRMED -> IN_PROGRESS`) so the enum's
+    `IN_PROGRESS` is real; `PLAN_PROPOSED` dropped (plans aren't persisted);
+    `Booking.providerId` is non-null (a booking exists only after a provider is chosen);
+    price/duration are copied from the catalog at confirm time (`priceCents`).
+  - Matching (`BookingPlanService`, the future GPT-4 swap point): APPROVED + category +
+    **exact normalised match** of the customer's postcode against `postcodeCoverage` (no
+    prefix matching - a coverage entry `SW1` won't match `SW1A 1AA`) + whole job inside a
+    weekly window **in UTC** + no overlapping PENDING_PROVIDER/CONFIRMED/IN_PROGRESS
+    booking. Trusted provider is tried first. Customer must have a postcode (400).
+  - Time edit on a booking resets it to PENDING_PROVIDER (provider re-accepts); notes-only
+    edit doesn't. Cancel is a soft cancel. Household notes are read live and shown only to
+    the assigned provider. Non-owners get 404, not 403.
+  - `src/notifications/NotificationsService.notify()` exists now, log-only; every booking
+    transition calls it. Phase 7 swaps in FCM. `completeBooking` has the Phase 5 capture hook.
+  - Gotcha: saving a booking loaded with its `provider` relation after changing
+    `providerId` silently reverts the FK (relation wins) - `reassignBooking` loads only
+    `subService` for this reason.
+  - Known gaps: UTC-only availability (needs per-provider timezone), check-then-insert
+    double-booking race (needs an exclusion constraint), and deleting a provider that has
+    bookings 500s on the FK (should be 409).
 
 ## Conventions
 

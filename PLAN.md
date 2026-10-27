@@ -172,6 +172,8 @@ booking action is taken."
 
 **Done when:** a customer can request a plan, confirm it, the provider can accept/decline/complete it, and trusted-provider marking + priority matching both work end to end.
 
+✅ Done 2026-10-27 - see `PHASE_4_API.md` / `PHASE_4_MODULE_GUIDE.md`. Deviations: added `POST /bookings/:id/start`; `PLAN_PROPOSED` status dropped and `providerId` non-null; `priceCents`; household notes read live (not a stored snapshot); non-owners get 404; availability compared in UTC; postcode match is exact (no prefix).
+
 ---
 
 ## Phase 5 — Payments (Stripe Connect)
