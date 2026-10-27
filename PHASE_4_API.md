@@ -87,16 +87,19 @@ Returns **200** `[ booking + subService ]`.
 
 ### 4. GET `{{baseUrl}}/bookings/{{bookingId}}`
 Roles: `CUSTOMER` (owner), `PROVIDER` (assigned provider), `ADMIN`. Anyone else gets **404**.
-The **assigned provider** also gets `householdNotes` (read live from the customer's profile);
-the customer and admin responses do not include it. Contact details are never returned.
+`provider` is always a small projection (`id`, `fullName`, `bio`) — never the raw provider
+record. The **assigned provider** additionally gets `householdNotes` and a `customer` object
+with the job `fullName` and `address` (both read live from the customer's profile); the
+customer and admin responses do not include those two keys. Email/phone are never returned.
 
-**200**
+**200** (as the assigned provider)
 ```json
 {
   "id": "…", "status": "CONFIRMED", "scheduledAt": "…", "durationMinutes": 120, "priceCents": 8000,
-  "provider": { "id": "…", "bio": "…" },
+  "provider": { "id": "…", "fullName": "Alex Plumber", "bio": "…" },
   "subService": { "id": "…", "name": "Regular home clean" },
-  "householdNotes": "Key under the mat"
+  "householdNotes": "Key under the mat",
+  "customer": { "fullName": "Sam Customer", "address": "1 High St" }
 }
 ```
 
@@ -137,7 +140,13 @@ Future plans prefer this provider whenever they are eligible (`isTrustedProvider
 ## Provider (token = `providerToken`, role `PROVIDER`)
 No bodies. `:id` is the booking id; only the booking's assigned provider can act, anyone else
 gets **404**; a wrong current status gets **409** (`"Booking is X, expected Y!"`). Each call
-returns **201** + the booking, and notifies the customer.
+returns **201** + the booking, and notifies the customer. A provider an admin has **disabled**
+gets **403** (`"Your provider account is not active!"`) on `accept` and `start` (they can still
+`decline` or `complete` work already on their plate).
+
+Every status change is a compare-and-set: if another request (the customer cancelling, an admin
+reassigning) changed the booking a moment earlier, the call fails with **409**
+`"Booking was just changed by someone else, please retry!"` instead of overwriting it.
 
 | Endpoint | From → To |
 |---|---|

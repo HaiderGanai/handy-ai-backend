@@ -106,8 +106,15 @@ How it is enforced:
 - All four provider actions go through one private method, `transitionAsProvider(userId,
   id, from, to, event)`: look up the caller's provider row, load the booking **scoped to that
   provider** (someone else's booking → 404, never 403, so ids can't be probed), then require
-  `status === from` (else 409 `Booking is X, expected Y!`).
+  `status === from` (else 409 `Booking is X, expected Y!`). `accept`/`start` also require the
+  provider's own status to be `APPROVED` (403 if an admin disabled them); `decline`/`complete`
+  stay allowed so work already underway can be wrapped up.
 - Customer actions load the booking scoped to `userId` (`getOwnedBooking`) — same 404 rule.
+- **Compare-and-set writes.** Every status change goes through `updateWhileStatus`, which runs
+  `UPDATE … WHERE id = ? AND status = <what we read> AND providerId = <what we read>` and
+  throws 409 if no row matched. Without this, `save()` would blindly overwrite, so e.g. a
+  customer cancelling at the same moment the provider starts could leave the booking
+  IN_PROGRESS. Admin reassign does the same.
 - Edit/cancel share `EDITABLE_STATUSES`. Editing only `notes` never changes the status;
   only a **different** `scheduledAt` re-validates the provider and resets to
   `PENDING_PROVIDER` so they re-accept.
@@ -116,7 +123,10 @@ How it is enforced:
 - `completeBooking` is where **Phase 5** will capture the Stripe payment (marked by a comment).
 
 Read access (`getBooking`): the owner, the assigned provider, or an admin; everyone else 404.
-Only the assigned provider gets `householdNotes`. Other-party contact details are never loaded.
+`provider` is projected to `{ id, fullName, bio }` (the entity also holds `stripeAccountId` and
+vetting fields that must not reach customers). Only the assigned provider gets
+`householdNotes` and the customer's `fullName` + `address` (the job location); email/phone are
+never loaded.
 
 ## 6. Trusted providers
 
@@ -133,9 +143,9 @@ it, so Phase 7 only has to replace the body with FCM — no caller changes.
 ## 8. Gotchas worth remembering
 
 - **Stale relation overrides the foreign key.** If you load a booking *with* its `provider`
-  relation and then change `booking.providerId`, TypeORM saves the old relation's id and
-  silently reverts your change. `reassignBooking` therefore loads only `subService`. Edit and
-  cancel do load `provider` (to notify them) but never change `providerId`.
+  relation and then `save()` after changing `booking.providerId`, TypeORM writes the old
+  relation's id and silently reverts your change. Writes now use `update()` with explicit
+  columns (so this can't bite), but keep it in mind if you ever go back to `save()`.
 - **DTO `undefined` fields.** DTO class fields exist as own `undefined` properties, so merges
   check `!== undefined` per field (as in Phase 1's profile bug).
 - **Postcode matching is exact.** A provider whose coverage is `["SW1", "SW3"]` (the example
@@ -153,6 +163,12 @@ it, so Phase 7 only has to replace the body with FCM — no caller changes.
   date-range query if a provider accumulates many.
 - **Deleting a provider that has bookings** (`DELETE /admin/providers/:id`) fails on the
   foreign key and returns a 500; it should be a clear 409. Out of this phase's scope.
+- **Not done (reviewer minors, deferred):** no index on `bookings("providerId","status")` /
+  `("userId")` (add in a new migration when tables grow); no upper bound on `scheduledAt`
+  (a booking horizon would be a cheap guard); a provider can accept a booking whose time has
+  already passed; admin reassign to the provider the booking already has resets it to
+  `PENDING_PROVIDER`; `listBookings` and the admin path of `getBooking` have no unit tests
+  (covered by the live pass only).
 - A declined booking is final: the customer has to plan again (no auto-rematch).
 - No payment yet (Phase 5) and no real push notifications yet (Phase 7).
 

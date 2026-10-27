@@ -12,7 +12,7 @@ describe('AdminBookingService', () => {
   const bookingRepo = {
     find: jest.fn(),
     findOne: jest.fn(),
-    save: jest.fn((v: object) => Promise.resolve(v)),
+    update: jest.fn(),
   };
   const planService = { getPostcode: jest.fn(), assertEligible: jest.fn() };
   const notifications = { notify: jest.fn() };
@@ -29,6 +29,7 @@ describe('AdminBookingService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    bookingRepo.update.mockResolvedValue({ affected: 1 });
     planService.getPostcode.mockResolvedValue('SW1A 1AA');
     planService.assertEligible.mockResolvedValue({ id: 'p2', userId: 'pu2' });
     const module = await Test.createTestingModule({
@@ -72,5 +73,13 @@ describe('AdminBookingService', () => {
     await expect(
       service.reassignBooking('b1', { providerId: 'p2' }),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('409s a reassign when the booking changed under the admin', async () => {
+    bookingRepo.findOne.mockResolvedValue(makeBooking(BookingStatus.CONFIRMED));
+    bookingRepo.update.mockResolvedValue({ affected: 0 });
+    await expect(
+      service.reassignBooking('b1', { providerId: 'p2' }),
+    ).rejects.toThrow(ConflictException);
   });
 });

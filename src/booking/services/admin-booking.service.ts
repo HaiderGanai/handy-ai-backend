@@ -33,7 +33,6 @@ export class AdminBookingService {
     id: string,
     data: ReassignBookingDto,
   ): Promise<Booking> {
-    // no `provider` relation loaded on purpose: a stale relation would override the new providerId on save
     const booking = await this.bookingRepository.findOne({
       where: { id },
       relations: { subService: true },
@@ -62,9 +61,24 @@ export class AdminBookingService {
       },
     );
 
-    booking.providerId = provider.id;
-    booking.status = BookingStatus.PENDING_PROVIDER;
-    const saved = await this.bookingRepository.save(booking);
+    // compare-and-set: only reassign if nobody changed the booking since we read it
+    const { affected } = await this.bookingRepository.update(
+      {
+        id: booking.id,
+        status: booking.status,
+        providerId: booking.providerId,
+      },
+      { providerId: provider.id, status: BookingStatus.PENDING_PROVIDER },
+    );
+    if (!affected) {
+      throw new ConflictException(
+        'Booking was just changed by someone else, please retry!',
+      );
+    }
+    const saved = Object.assign(booking, {
+      providerId: provider.id,
+      status: BookingStatus.PENDING_PROVIDER,
+    });
     this.notificationsService.notify(provider.userId, 'BOOKING_REQUESTED', {
       bookingId: booking.id,
     });

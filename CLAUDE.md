@@ -209,9 +209,17 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
     the assigned provider. Non-owners get 404, not 403.
   - `src/notifications/NotificationsService.notify()` exists now, log-only; every booking
     transition calls it. Phase 7 swaps in FCM. `completeBooking` has the Phase 5 capture hook.
-  - Gotcha: saving a booking loaded with its `provider` relation after changing
-    `providerId` silently reverts the FK (relation wins) - `reassignBooking` loads only
-    `subService` for this reason.
+  - Final review (Opus) found 4 Important issues, all fixed with RED->GREEN tests: booking
+    detail leaked the raw `Provider` entity (now projected to `{id, fullName, bio}`; would have
+    exposed `stripeAccountId` in Phase 5); status changes were unguarded read-modify-write
+    (now compare-and-set via `update(... WHERE id, status, providerId)` -> 409 on conflict);
+    the assigned provider now also gets the customer's `fullName` + `address`; a DISABLED
+    provider can't `accept`/`start` (403) but can still `decline`/`complete`.
+  - Gotcha: `save()` of a booking loaded with its `provider` relation after changing
+    `providerId` silently reverts the FK (relation wins). Booking writes use `update()` now.
+  - Deferred minors: no indexes on bookings(providerId,status)/(userId); no `scheduledAt`
+    horizon; past-time accept allowed; reassign-to-same-provider resets status; no unit tests
+    for `listBookings` / admin `getBooking`.
   - Known gaps: UTC-only availability (needs per-provider timezone), check-then-insert
     double-booking race (needs an exclusion constraint), and deleting a provider that has
     bookings 500s on the FK (should be 409).

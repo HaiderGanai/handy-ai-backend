@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { Provider } from '../../provider/entities/provider.entity';
+import { ProviderStatus } from '../../provider/enums/provider-status.enum';
 import { User } from '../../user/entities/user.entity';
 import { Role } from '../../user/enums/role.enum';
 import { CreateBookingDto } from '../dto/create-booking.dto';
@@ -129,6 +130,8 @@ export class BookingService {
       throw new ConflictException('Only upcoming bookings can be edited!');
     }
 
+    const changes: Partial<Pick<Booking, 'status' | 'scheduledAt' | 'notes'>> =
+      {};
     if (
       data.scheduledAt !== undefined &&
       data.scheduledAt.getTime() !== booking.scheduledAt.getTime()
@@ -145,15 +148,19 @@ export class BookingService {
         durationMinutes: booking.durationMinutes,
         excludeBookingId: booking.id,
       });
-      booking.scheduledAt = data.scheduledAt;
+      changes.scheduledAt = data.scheduledAt;
       // the provider has to re-accept the new time
-      booking.status = BookingStatus.PENDING_PROVIDER;
+      changes.status = BookingStatus.PENDING_PROVIDER;
     }
     if (data.notes !== undefined) {
-      booking.notes = data.notes;
+      changes.notes = data.notes;
+    }
+    // nothing to change: skip the write and the notification
+    if (Object.keys(changes).length === 0) {
+      return booking;
     }
 
-    const saved = await this.bookingRepository.save(booking);
+    const saved = await this.updateWhileStatus(booking, changes);
     this.notificationsService.notify(
       booking.provider.userId,
       'BOOKING_UPDATED',
@@ -167,8 +174,9 @@ export class BookingService {
     if (!EDITABLE_STATUSES.includes(booking.status)) {
       throw new ConflictException('Only upcoming bookings can be cancelled!');
     }
-    booking.status = BookingStatus.CANCELLED;
-    const saved = await this.bookingRepository.save(booking);
+    const saved = await this.updateWhileStatus(booking, {
+      status: BookingStatus.CANCELLED,
+    });
     this.notificationsService.notify(
       booking.provider.userId,
       'BOOKING_CANCELLED',
@@ -196,7 +204,7 @@ export class BookingService {
   async getBooking(userId: string, role: Role, id: string) {
     const booking = await this.bookingRepository.findOne({
       where: { id },
-      relations: { provider: true, subService: true },
+      relations: { provider: { user: true }, subService: true },
     });
     const isOwner = booking?.userId === userId;
     const isAssignedProvider =
@@ -205,16 +213,39 @@ export class BookingService {
       throw new NotFoundException('Booking not found!');
     }
 
-    // household notes go to the assigned provider only, read live (not copied onto the booking)
-    let householdNotes: string | null | undefined;
+    // project the provider: the entity carries internals (stripeAccountId, vetting fields)
+    const { provider, ...rest } = booking;
+    const result = {
+      ...rest,
+      provider: {
+        id: provider.id,
+        fullName: provider.user.fullName,
+        bio: provider.bio,
+      },
+      householdNotes: undefined as string | null | undefined,
+      customer: undefined as
+        { fullName: string | null; address: string | null } | undefined,
+    };
+
+    // household notes + job address go to the assigned provider only, read live
+    // (not copied onto the booking); email/phone are never loaded
     if (isAssignedProvider) {
       const customer = await this.userRepository.findOne({
         where: { id: booking.userId },
-        select: { id: true, householdNotes: true },
+        select: {
+          id: true,
+          householdNotes: true,
+          address: true,
+          fullName: true,
+        },
       });
-      householdNotes = customer?.householdNotes ?? null;
+      result.householdNotes = customer?.householdNotes ?? null;
+      result.customer = {
+        fullName: customer?.fullName ?? null,
+        address: customer?.address ?? null,
+      };
     }
-    return { ...booking, householdNotes };
+    return result;
   }
 
   async addTrustedProvider(
@@ -244,6 +275,12 @@ export class BookingService {
     event: string,
   ): Promise<Booking> {
     const provider = await this.getProviderForUser(userId);
+    // a disabled provider may decline or finish work already on their plate, not take on more
+    const takesOnWork =
+      to === BookingStatus.CONFIRMED || to === BookingStatus.IN_PROGRESS;
+    if (takesOnWork && provider.status !== ProviderStatus.APPROVED) {
+      throw new ForbiddenException('Your provider account is not active!');
+    }
     const booking = await this.bookingRepository.findOne({
       where: { id, providerId: provider.id },
     });
@@ -255,12 +292,33 @@ export class BookingService {
         `Booking is ${booking.status}, expected ${from}!`,
       );
     }
-    booking.status = to;
-    const saved = await this.bookingRepository.save(booking);
+    const saved = await this.updateWhileStatus(booking, { status: to });
     this.notificationsService.notify(booking.userId, event, {
       bookingId: booking.id,
     });
     return saved;
+  }
+
+  // compare-and-set: only writes if the booking still has the status/provider we read,
+  // so two concurrent requests can't both pass their check and the last one win
+  private async updateWhileStatus(
+    booking: Booking,
+    changes: Partial<Pick<Booking, 'status' | 'scheduledAt' | 'notes'>>,
+  ): Promise<Booking> {
+    const { affected } = await this.bookingRepository.update(
+      {
+        id: booking.id,
+        status: booking.status,
+        providerId: booking.providerId,
+      },
+      changes,
+    );
+    if (!affected) {
+      throw new ConflictException(
+        'Booking was just changed by someone else, please retry!',
+      );
+    }
+    return Object.assign(booking, changes);
   }
 
   private async getProviderForUser(userId: string): Promise<Provider> {

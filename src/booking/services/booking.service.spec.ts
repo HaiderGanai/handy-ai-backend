@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { Provider } from '../../provider/entities/provider.entity';
+import { ProviderStatus } from '../../provider/enums/provider-status.enum';
 import { User } from '../../user/entities/user.entity';
 import { Role } from '../../user/enums/role.enum';
 import { Booking } from '../entities/booking.entity';
@@ -21,6 +22,7 @@ describe('BookingService', () => {
     findOne: jest.fn(),
     find: jest.fn(),
     exists: jest.fn(),
+    update: jest.fn(),
     create: jest.fn((v: object) => v),
     save: jest.fn((v: object) => Promise.resolve({ id: 'b1', ...v })),
   };
@@ -45,7 +47,13 @@ describe('BookingService', () => {
     priceCents: 12000,
     status: BookingStatus.PENDING_PROVIDER,
     notes: null,
-    provider: { userId: 'pu1' },
+    provider: {
+      id: 'p1',
+      userId: 'pu1',
+      bio: 'bio',
+      stripeAccountId: 'acct_secret',
+      user: { fullName: 'Pro' },
+    },
     ...over,
   });
 
@@ -59,7 +67,12 @@ describe('BookingService', () => {
     });
     planService.getPostcode.mockResolvedValue('SW1A 1AA');
     planService.assertEligible.mockResolvedValue({ id: 'p1', userId: 'pu1' });
-    providerRepo.findOne.mockResolvedValue({ id: 'p1', userId: 'pu1' });
+    bookingRepo.update.mockResolvedValue({ affected: 1 });
+    providerRepo.findOne.mockResolvedValue({
+      id: 'p1',
+      userId: 'pu1',
+      status: ProviderStatus.APPROVED,
+    });
     const module = await Test.createTestingModule({
       providers: [
         BookingService,
@@ -207,7 +220,11 @@ describe('BookingService', () => {
 
   describe('getBooking', () => {
     beforeEach(() => {
-      userRepo.findOne.mockResolvedValue({ householdNotes: 'Key under mat' });
+      userRepo.findOne.mockResolvedValue({
+        householdNotes: 'Key under mat',
+        address: '1 High St',
+        fullName: 'Cust',
+      });
     });
 
     it('shows household notes to the assigned provider only', async () => {
@@ -244,6 +261,72 @@ describe('BookingService', () => {
       expect(trustedRepo.upsert).toHaveBeenCalledWith(
         { userId: 'c1', providerId: 'p1' },
         ['userId', 'providerId'],
+      );
+    });
+  });
+
+  describe('review fixes', () => {
+    it('does not leak provider internals (stripeAccountId etc.) to the customer', async () => {
+      bookingRepo.findOne.mockResolvedValue(makeBooking());
+      const result = await service.getBooking('c1', Role.CUSTOMER, 'b1');
+      expect(result.provider).toEqual({
+        id: 'p1',
+        fullName: 'Pro',
+        bio: 'bio',
+      });
+    });
+
+    it('gives the assigned provider the job address, and nobody else', async () => {
+      userRepo.findOne.mockResolvedValue({
+        householdNotes: 'Key under mat',
+        address: '1 High St',
+        fullName: 'Cust',
+      });
+      bookingRepo.findOne.mockResolvedValue(makeBooking());
+      const asProvider = await service.getBooking('pu1', Role.PROVIDER, 'b1');
+      expect(asProvider.customer).toEqual({
+        fullName: 'Cust',
+        address: '1 High St',
+      });
+      const asOwner = await service.getBooking('c1', Role.CUSTOMER, 'b1');
+      expect(asOwner.customer).toBeUndefined();
+    });
+
+    it('409s a transition when another request changed the booking first', async () => {
+      bookingRepo.findOne.mockResolvedValue(makeBooking());
+      bookingRepo.update.mockResolvedValue({ affected: 0 });
+      await expect(service.acceptBooking('pu1', 'b1')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('409s a cancel when another request changed the booking first', async () => {
+      bookingRepo.findOne.mockResolvedValue(makeBooking());
+      bookingRepo.update.mockResolvedValue({ affected: 0 });
+      await expect(service.cancelBooking('c1', 'b1')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('lets a disabled provider finish or decline work but not take on more', async () => {
+      providerRepo.findOne.mockResolvedValue({
+        id: 'p1',
+        userId: 'pu1',
+        status: ProviderStatus.DISABLED,
+      });
+      bookingRepo.findOne.mockResolvedValue(makeBooking());
+      await expect(service.acceptBooking('pu1', 'b1')).rejects.toThrow(
+        ForbiddenException,
+      );
+      bookingRepo.findOne.mockResolvedValue(
+        makeBooking({ status: BookingStatus.CONFIRMED }),
+      );
+      await expect(service.startBooking('pu1', 'b1')).rejects.toThrow(
+        ForbiddenException,
+      );
+      bookingRepo.findOne.mockResolvedValue(makeBooking());
+      expect((await service.declineBooking('pu1', 'b1')).status).toBe(
+        BookingStatus.DECLINED,
       );
     });
   });
