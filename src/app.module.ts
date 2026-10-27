@@ -2,6 +2,7 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppCacheModule } from './cache/app-cache.module';
 import { AuthModule } from './auth/auth.module';
+import { BookingModule } from './booking/booking.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { LoggingMiddleware } from './common/logging.middleware';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
@@ -24,6 +25,7 @@ import { UserModule } from './user/user.module';
     AuthModule,
     CatalogModule,
     ProviderModule,
+    BookingModule,
   ],
   controllers: [HealthController],
 })
