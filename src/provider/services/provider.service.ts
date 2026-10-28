@@ -17,6 +17,18 @@ import { DocumentStatus } from '../enums/document-status.enum';
 import { DocumentType } from '../enums/document-type.enum';
 import { ProviderStatus } from '../enums/provider-status.enum';
 
+// the provider record as before, plus the account details the profile screen needs
+// (projected: the raw user also carries role, householdNotes, OTP/reset fields)
+export type ProviderProfile = Omit<Provider, 'user'> & {
+  user: {
+    fullName: string | null;
+    email: string;
+    photoUrl: string | null;
+    address: string | null;
+    postcode: string | null;
+  };
+};
+
 const ALLOWED_DOCUMENT_MIME_TYPES = [
   'image/jpeg',
   'image/png',
@@ -60,22 +72,25 @@ export class ProviderService {
     return this.providerRepository.save(provider);
   }
 
-  async getProfile(userId: string): Promise<Provider> {
-    const provider = await this.providerRepository.findOne({
-      where: { userId },
-      relations: { categories: true, availability: true, documents: true },
-    });
-    if (!provider) {
-      throw new NotFoundException('Provider profile not found!');
-    }
-    return provider;
+  async getProfile(userId: string): Promise<ProviderProfile> {
+    const { user, ...provider } = await this.findProfile(userId);
+    return {
+      ...provider,
+      user: {
+        fullName: user.fullName,
+        email: user.email,
+        photoUrl: user.photoUrl,
+        address: user.address,
+        postcode: user.postcode,
+      },
+    };
   }
 
   async updateProfile(
     userId: string,
     data: UpdateProviderProfileDto,
-  ): Promise<Provider> {
-    const provider = await this.getProfile(userId);
+  ): Promise<ProviderProfile> {
+    const provider = await this.findProfile(userId);
 
     //copy only the fields that were sent (omitted DTO fields are own `undefined` props)
     if (data.bio !== undefined) {
@@ -91,7 +106,9 @@ export class ProviderService {
       this.assertValidAvailability(data.availability);
       provider.availability = data.availability as Provider['availability'];
     }
-    return this.providerRepository.save(provider);
+    await this.providerRepository.save(provider);
+    // re-read so PATCH returns exactly what GET returns
+    return this.getProfile(userId);
   }
 
   async uploadDocuments(
@@ -150,6 +167,22 @@ export class ProviderService {
       await this.providerRepository.save(provider);
     }
     return saved;
+  }
+
+  private async findProfile(userId: string): Promise<Provider> {
+    const provider = await this.providerRepository.findOne({
+      where: { userId },
+      relations: {
+        user: true,
+        categories: true,
+        availability: true,
+        documents: true,
+      },
+    });
+    if (!provider) {
+      throw new NotFoundException('Provider profile not found!');
+    }
+    return provider;
   }
 
   private async findCategories(ids: string[]): Promise<ServiceCategory[]> {

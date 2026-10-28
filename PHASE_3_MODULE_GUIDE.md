@@ -100,6 +100,12 @@ properties set to `undefined`, and a naive `Object.assign` would wipe them (the 
 found in Phase 1's profile update). Availability is replaced wholesale: old rows are
 deleted (`orphanedRowAction: 'delete'`) and the new ones inserted.
 
+Both `GET` and `PATCH /provider/profile` return a `ProviderProfile`: the provider record
+exactly as before plus a `user` object projected to `fullName`, `email`, `photoUrl`,
+`address`, `postcode` (the raw user row also holds `role`, `householdNotes` and OTP/reset
+fields, so it is never returned whole). `PATCH` saves and then re-reads through the same
+`getProfile`, so the two responses can't drift apart.
+
 ### Document upload — `POST /provider/documents`
 1. `FileFieldsInterceptor` is configured with five fields named after `DocumentType`,
    `maxCount: 1` each, and a 5 MB per-file limit. The multipart **field name is the

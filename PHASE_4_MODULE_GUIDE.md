@@ -122,6 +122,14 @@ How it is enforced:
   from the same table.
 - `completeBooking` is where **Phase 5** will capture the Stripe payment (marked by a comment).
 
+Listing: `listBookings` returns the caller's bookings **without** `IN_PROGRESS` ones (a
+`Not(IN_PROGRESS)` status filter) unless the caller passes an explicit `?status=`;
+`listInProgressBookings` (`GET /bookings/in-progress`) returns only `IN_PROGRESS`. Both go
+through one private `findForUser` (customers by `userId`, providers by their provider id), so
+a booking is in exactly one of the two lists at any time, and moves back into the main list
+when `completeBooking` sets `COMPLETED`. The route is declared before `GET /:id` so
+`in-progress` isn't parsed as a booking id.
+
 Read access (`getBooking`): the owner, the assigned provider, or an admin; everyone else 404.
 `provider` is projected to `{ id, fullName, bio }` (the entity also holds `stripeAccountId` and
 vetting fields that must not reach customers). Only the assigned provider gets

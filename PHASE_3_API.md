@@ -84,13 +84,28 @@ Rules
 ---
 
 ### 2. GET `{{baseUrl}}/provider/profile`
-No body. Returns the signed-in provider's profile with `categories`, `availability` and
-`documents`. Time values come back as `HH:mm:ss` (e.g. `"09:00:00"`).
+No body. Returns the signed-in provider's profile with `categories`, `availability`,
+`documents` and a `user` object. Time values come back as `HH:mm:ss` (e.g. `"09:00:00"`).
 
 | Status | Body |
 |---|---|
-| **200** | provider (same shape as above plus `documents`) |
+| **200** | provider (same shape as above, plus `documents` and `user`) |
 | 404 | `{ "message": "Provider profile not found!", ... }` (not onboarded yet) |
+
+`user` — the account details behind the profile (added after Phase 3; every other field is
+unchanged and stays where it was):
+```json
+"user": {
+  "fullName": "Alex Plumber",
+  "email": "alex@example.com",
+  "photoUrl": "https://res.cloudinary.com/.../photo.jpg",
+  "address": "1 High St",
+  "postcode": "SW1A 1AA"
+}
+```
+Any of `fullName`, `photoUrl`, `address`, `postcode` can be `null` until the provider fills
+them in (via `PATCH /user/profile`). Only these five fields are returned — the account's
+role, household notes and sign-in secrets are never included.
 
 `documents` item
 ```json
@@ -117,8 +132,11 @@ Body (example: change only availability)
 
 | Status | Body |
 |---|---|
-| **200** | updated provider (with `documents`) |
+| **200** | updated provider — exactly the same shape as `GET /provider/profile` (including `documents` and `user`) |
 | 404 | provider profile not found |
+
+Name, address, postcode and photo are not edited here; use `PATCH /user/profile` for those
+(the change shows up in `user` on the next read).
 | 400 | same validation errors as onboarding |
 
 ---

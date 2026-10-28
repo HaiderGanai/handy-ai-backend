@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Not } from 'typeorm';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { Provider } from '../../provider/entities/provider.entity';
 import { ProviderStatus } from '../../provider/enums/provider-status.enum';
@@ -327,6 +328,50 @@ describe('BookingService', () => {
       bookingRepo.findOne.mockResolvedValue(makeBooking());
       expect((await service.declineBooking('pu1', 'b1')).status).toBe(
         BookingStatus.DECLINED,
+      );
+    });
+  });
+
+  describe('listing', () => {
+    it('hides IN_PROGRESS bookings from the all-bookings list by default', async () => {
+      bookingRepo.find.mockResolvedValue([]);
+      await service.listBookings('c1', Role.CUSTOMER, {});
+      expect(bookingRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'c1', status: Not(BookingStatus.IN_PROGRESS) },
+        }),
+      );
+    });
+
+    it('still honours an explicit status filter, including IN_PROGRESS', async () => {
+      bookingRepo.find.mockResolvedValue([]);
+      await service.listBookings('c1', Role.CUSTOMER, {
+        status: BookingStatus.IN_PROGRESS,
+      });
+      expect(bookingRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'c1', status: BookingStatus.IN_PROGRESS },
+        }),
+      );
+    });
+
+    it("lists only the customer's IN_PROGRESS bookings", async () => {
+      bookingRepo.find.mockResolvedValue([]);
+      await service.listInProgressBookings('c1', Role.CUSTOMER);
+      expect(bookingRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'c1', status: BookingStatus.IN_PROGRESS },
+        }),
+      );
+    });
+
+    it("lists only the provider's own IN_PROGRESS jobs", async () => {
+      bookingRepo.find.mockResolvedValue([]);
+      await service.listInProgressBookings('pu1', Role.PROVIDER);
+      expect(bookingRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { providerId: 'p1', status: BookingStatus.IN_PROGRESS },
+        }),
       );
     });
   });

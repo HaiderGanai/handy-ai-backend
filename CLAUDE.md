@@ -223,6 +223,27 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
   - Known gaps: UTC-only availability (needs per-provider timezone), check-then-insert
     double-booking race (needs an exclusion constraint), and deleting a provider that has
     bookings 500s on the FK (should be 409).
+- 2026-10-28 - Two API tweaks after Phase 4 (docs: `PHASE_3_API.md`/module guide,
+  `PHASE_4_API.md`/module guide, Postman "List In-Progress Bookings"):
+  - `GET` and `PATCH /provider/profile` now return the same `ProviderProfile`: the existing
+    provider record unchanged plus a `user` object projected to `fullName`, `email`,
+    `photoUrl`, `address`, `postcode` (the raw user row also has role/householdNotes/OTP
+    fields - never return it whole). `PATCH` re-reads via `getProfile` so it can't drift
+    from GET. No new editable fields: name/address/postcode/photo stay on `PATCH /user/profile`.
+  - New `GET /bookings/in-progress` (CUSTOMER and PROVIDER). `GET /bookings` now **excludes**
+    `IN_PROGRESS` bookings (they reappear as `COMPLETED`); an explicit `?status=IN_PROGRESS`
+    still returns them. Applies to both roles (providers' inbox too). The route is declared
+    before `GET /bookings/:id` - keep it there.
+- 2026-10-27/28 - Dev infra notes: Postgres on the server (`178.128.54.158:5432`) is reachable
+  only through `pg_hba.conf` rules; the `handyai` rule is `hostssl` and its source IP must match
+  (the gym app's rule is `0.0.0.0/0`, which is why it never cares about IP). From this machine
+  the app connects with `?sslmode=verify-ca&uselibpqcompat=true&sslrootcert=~/.postgresql/handyai-server.crt`
+  (pinned self-signed cert; fingerprint verified by the user). `.env` keeps the local
+  `DATABASE_URL` as a comment - local and server DBs are separate data, and a JWT/session from
+  one environment's users doesn't work against the other (FK errors, 401s). Never run
+  delete-style test scripts while `.env` points at the server. Phase 4 migration is applied on
+  the server. `.env` can't be `source`d in a shell anymore (the `&` in the URL) - the app's
+  dotenv/ConfigModule reads it fine.
 
 ## Conventions
 

@@ -85,6 +85,16 @@ Roles: `CUSTOMER` (own bookings) and `PROVIDER` (own jobs — the inbox). Sorted
 `scheduledAt`. Optional query `?status=PENDING_PROVIDER` (any status value).
 Returns **200** `[ booking + subService ]`.
 
+**Bookings that are `IN_PROGRESS` are not in this list** — they live in
+`GET /bookings/in-progress` (next) and reappear here as `COMPLETED` once the job is
+finished. An explicit `?status=IN_PROGRESS` still returns them.
+
+### 3b. GET `{{baseUrl}}/bookings/in-progress`
+Roles: `CUSTOMER` and `PROVIDER`, same scoping as above (a customer's own bookings, a
+provider's own jobs). No body, no query. Returns **200** `[ booking + subService ]` — only
+bookings whose status is `IN_PROGRESS` (the provider has pressed *start* and not yet
+*complete*), sorted by `scheduledAt`. Empty array when none.
+
 ### 4. GET `{{baseUrl}}/bookings/{{bookingId}}`
 Roles: `CUSTOMER` (owner), `PROVIDER` (assigned provider), `ADMIN`. Anyone else gets **404**.
 `provider` is always a small projection (`id`, `fullName`, `bio`) — never the raw provider
@@ -202,6 +212,7 @@ IN_PROGRESS ──complete──▶ COMPLETED ──▶ customer can mark provid
 ```
 
 ## Recommended run order
-Customer: set postcode → Plan → Create → *(provider)* Accept → Start → Complete → *(customer)*
+Customer: set postcode → Plan → Create → *(provider)* Accept → Start *(booking moves to
+`GET /bookings/in-progress`)* → Complete *(back into `GET /bookings`)* → *(customer)*
 Mark trusted → Plan again (see `isTrustedProvider: true`). Then try Edit / Cancel on a second
 booking, and Admin List / Reassign.

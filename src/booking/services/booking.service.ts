@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Not, Repository } from 'typeorm';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { Provider } from '../../provider/entities/provider.entity';
 import { ProviderStatus } from '../../provider/enums/provider-status.enum';
@@ -185,20 +185,22 @@ export class BookingService {
     return saved;
   }
 
+  // IN_PROGRESS bookings are listed separately (listInProgressBookings) and come back
+  // into this list once COMPLETED; an explicit ?status= filter still wins
   async listBookings(
     userId: string,
     role: Role,
     query: ListBookingsQueryDto,
   ): Promise<Booking[]> {
-    const owner =
-      role === Role.PROVIDER
-        ? { providerId: (await this.getProviderForUser(userId)).id }
-        : { userId };
-    return this.bookingRepository.find({
-      where: { ...owner, ...(query.status ? { status: query.status } : {}) },
-      relations: { subService: true },
-      order: { scheduledAt: 'ASC' },
-    });
+    return this.findForUser(
+      userId,
+      role,
+      query.status ?? Not(BookingStatus.IN_PROGRESS),
+    );
+  }
+
+  async listInProgressBookings(userId: string, role: Role): Promise<Booking[]> {
+    return this.findForUser(userId, role, BookingStatus.IN_PROGRESS);
   }
 
   async getBooking(userId: string, role: Role, id: string) {
@@ -265,6 +267,22 @@ export class BookingService {
       'providerId',
     ]);
     return { message: 'Provider marked as trusted!' };
+  }
+
+  private async findForUser(
+    userId: string,
+    role: Role,
+    status: FindOptionsWhere<Booking>['status'],
+  ): Promise<Booking[]> {
+    const owner =
+      role === Role.PROVIDER
+        ? { providerId: (await this.getProviderForUser(userId)).id }
+        : { userId };
+    return this.bookingRepository.find({
+      where: { ...owner, status },
+      relations: { subService: true },
+      order: { scheduledAt: 'ASC' },
+    });
   }
 
   private async transitionAsProvider(

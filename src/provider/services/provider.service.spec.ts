@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ServiceCategory } from '../../catalog/entities/service-category.entity';
@@ -129,5 +133,72 @@ describe('ProviderService', () => {
       status: DocumentStatus.PENDING,
     });
     expect(provider.status).toBe(ProviderStatus.PENDING);
+  });
+
+  describe('profile', () => {
+    const makeProfile = () => ({
+      id: 'p1',
+      userId: 'u1',
+      bio: 'Plumber',
+      postcodeCoverage: ['SW1'],
+      status: ProviderStatus.APPROVED,
+      categories: [{ id: 'c1' }],
+      availability: [],
+      documents: [],
+      user: {
+        id: 'u1',
+        fullName: 'Alex Pro',
+        email: 'alex@example.com',
+        photoUrl: 'https://x/photo.jpg',
+        address: '1 High St',
+        postcode: 'SW1',
+        householdNotes: 'customer-only secret',
+        role: 'PROVIDER',
+      },
+    });
+
+    it('keeps the existing provider fields and adds a projected user object', async () => {
+      providerRepo.findOne.mockResolvedValue(makeProfile());
+      const profile = await service.getProfile('u1');
+      expect(profile).toMatchObject({
+        id: 'p1',
+        userId: 'u1',
+        bio: 'Plumber',
+        status: ProviderStatus.APPROVED,
+        categories: [{ id: 'c1' }],
+      });
+      expect(profile.user).toEqual({
+        fullName: 'Alex Pro',
+        email: 'alex@example.com',
+        photoUrl: 'https://x/photo.jpg',
+        address: '1 High St',
+        postcode: 'SW1',
+      });
+    });
+
+    it('404s when the caller has no provider profile', async () => {
+      providerRepo.findOne.mockResolvedValue(null);
+      await expect(service.getProfile('u1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('PATCH changes only the sent fields and returns the same full shape as GET', async () => {
+      // behave like a database: save stores the row, later reads return it
+      let row = makeProfile();
+      providerRepo.findOne.mockImplementation(() => Promise.resolve(row));
+      providerRepo.save.mockImplementation((value: typeof row) => {
+        row = { ...value };
+        return Promise.resolve(value);
+      });
+      const updated = await service.updateProfile('u1', { bio: 'Electrician' });
+      expect(updated.bio).toBe('Electrician');
+      expect(updated.postcodeCoverage).toEqual(['SW1']);
+      expect(updated.user).toEqual({
+        fullName: 'Alex Pro',
+        email: 'alex@example.com',
+        photoUrl: 'https://x/photo.jpg',
+        address: '1 High St',
+        postcode: 'SW1',
+      });
+    });
   });
 });

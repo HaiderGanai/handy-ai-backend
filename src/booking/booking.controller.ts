@@ -58,6 +58,16 @@ export class BookingController {
     return this.bookingService.listBookings(req.user.id, req.user.role, query);
   }
 
+  // declared before '/:id' so "in-progress" isn't parsed as a booking id
+  @Get('/in-progress')
+  @Roles(Role.CUSTOMER, Role.PROVIDER)
+  async listInProgressBookings(@Req() req: AuthenticatedRequest) {
+    return this.bookingService.listInProgressBookings(
+      req.user.id,
+      req.user.role,
+    );
+  }
+
   @Get('/:id')
   @Roles(Role.CUSTOMER, Role.PROVIDER, Role.ADMIN)
   async getBooking(
