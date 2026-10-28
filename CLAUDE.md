@@ -229,7 +229,10 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
     provider record unchanged plus a `user` object projected to `fullName`, `email`,
     `photoUrl`, `address`, `postcode` (the raw user row also has role/householdNotes/OTP
     fields - never return it whole). `PATCH` re-reads via `getProfile` so it can't drift
-    from GET. No new editable fields: name/address/postcode/photo stay on `PATCH /user/profile`.
+    from GET. `PATCH` also accepts nested `user: { fullName?, address?, postcode? }`
+    (`UpdateProviderUserDto`; `email`/`photoUrl`/`householdNotes` not accepted) - saved in the
+    same `save()` via `cascade: ['update']` on `Provider.user` (verified against a real DB).
+    `PATCH /user/profile` and `POST /user/profile/photo` still work for the same data.
   - New `GET /bookings/in-progress` (CUSTOMER and PROVIDER). `GET /bookings` now **excludes**
     `IN_PROGRESS` bookings (they reappear as `COMPLETED`); an explicit `?status=IN_PROGRESS`
     still returns them. Applies to both roles (providers' inbox too). The route is declared

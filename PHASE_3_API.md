@@ -121,22 +121,46 @@ role, household notes and sign-in secrets are never included.
 ---
 
 ### 3. PATCH `{{baseUrl}}/provider/profile`
-Send any subset of the onboarding fields; omitted fields are left alone. `categoryIds` and
-`availability` **replace** the previous values (they are not merged). `status` cannot be
-changed here.
+Send any subset of the fields below; omitted fields are left alone. `postcodeCoverage`,
+`categoryIds` and `availability` **replace** the previous values (they are not merged).
+`status` cannot be changed here.
 
-Body (example: change only availability)
+Body (every editable field — send only the ones you want to change)
+```json
+{
+  "bio": "10 years of cleaning experience",
+  "postcodeCoverage": ["SW1", "SW3", "SW1A 1AA"],
+  "categoryIds": ["{{categoryId}}"],
+  "availability": [
+    { "dayOfWeek": 1, "startTime": "09:00", "endTime": "17:00" },
+    { "dayOfWeek": 3, "startTime": "10:00", "endTime": "14:00" }
+  ],
+  "user": {
+    "fullName": "Alex Plumber",
+    "address": "1 High St",
+    "postcode": "SW1A 1AA"
+  }
+}
+```
+Example (change only availability)
 ```json
 { "availability": [{ "dayOfWeek": 2, "startTime": "10:00", "endTime": "12:00" }] }
 ```
+
+`user` is optional and holds the account details; each of its three fields is optional too
+(omitted = unchanged). They are saved together with the provider fields in one save. Not
+accepted: `email` (the sign-in identity), `photoUrl` (set by `POST /user/profile/photo`),
+`role`, `status`, `stripeAccountId` — unknown keys are stripped silently, and a non-string
+value is a 400.
 
 | Status | Body |
 |---|---|
 | **200** | updated provider — exactly the same shape as `GET /provider/profile` (including `documents` and `user`) |
 | 404 | provider profile not found |
 
-Name, address, postcode and photo are not edited here; use `PATCH /user/profile` for those
-(the change shows up in `user` on the next read).
+`PATCH /user/profile` still edits the same name/address/postcode (plus `householdNotes`, which
+is a customer feature); the photo is changed with `POST /user/profile/photo`. Either way the
+new values show up in `user` on the next read.
 | 400 | same validation errors as onboarding |
 
 ---

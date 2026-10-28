@@ -106,6 +106,16 @@ export class ProviderService {
       this.assertValidAvailability(data.availability);
       provider.availability = data.availability as Provider['availability'];
     }
+    // account fields: same per-field undefined check; saved with the provider (cascade update)
+    if (data.user?.fullName !== undefined) {
+      provider.user.fullName = data.user.fullName;
+    }
+    if (data.user?.address !== undefined) {
+      provider.user.address = data.user.address;
+    }
+    if (data.user?.postcode !== undefined) {
+      provider.user.postcode = data.user.postcode;
+    }
     await this.providerRepository.save(provider);
     // re-read so PATCH returns exactly what GET returns
     return this.getProfile(userId);

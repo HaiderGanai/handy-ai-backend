@@ -927,7 +927,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"availability\": [\n    {\n      \"dayOfWeek\": 2,\n      \"startTime\": \"10:00\",\n      \"endTime\": \"12:00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"bio\": \"10 years of cleaning experience\",\n  \"postcodeCoverage\": [\n    \"SW1\",\n    \"SW3\",\n    \"SW1A 1AA\"\n  ],\n  \"categoryIds\": [\n    \"{{categoryId}}\"\n  ],\n  \"availability\": [\n    {\n      \"dayOfWeek\": 1,\n      \"startTime\": \"09:00\",\n      \"endTime\": \"17:00\"\n    },\n    {\n      \"dayOfWeek\": 3,\n      \"startTime\": \"10:00\",\n      \"endTime\": \"14:00\"\n    }\n  ],\n  \"user\": {\n    \"fullName\": \"Alex Plumber\",\n    \"address\": \"1 High St\",\n    \"postcode\": \"SW1A 1AA\"\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"

@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ServiceCategory } from '../../catalog/entities/service-category.entity';
@@ -12,6 +13,7 @@ import { Provider } from '../entities/provider.entity';
 import { DocumentStatus } from '../enums/document-status.enum';
 import { DocumentType } from '../enums/document-type.enum';
 import { ProviderStatus } from '../enums/provider-status.enum';
+import { UpdateProviderProfileDto } from '../dto/update-provider-profile.dto';
 import { ProviderService } from './provider.service';
 
 describe('ProviderService', () => {
@@ -199,6 +201,92 @@ describe('ProviderService', () => {
         address: '1 High St',
         postcode: 'SW1',
       });
+    });
+  });
+
+  describe('profile: user fields in PATCH', () => {
+    const makeRow = () => ({
+      id: 'p1',
+      userId: 'u1',
+      bio: 'Plumber',
+      postcodeCoverage: ['SW1'],
+      status: ProviderStatus.APPROVED,
+      categories: [],
+      availability: [],
+      documents: [],
+      user: {
+        id: 'u1',
+        fullName: 'Alex Pro',
+        email: 'alex@example.com',
+        photoUrl: null,
+        address: '1 High St',
+        postcode: 'SW1',
+      },
+    });
+    let row = makeRow();
+    beforeEach(() => {
+      row = makeRow();
+      providerRepo.findOne.mockImplementation(() => Promise.resolve(row));
+      providerRepo.save.mockImplementation((value: typeof row) => {
+        row = { ...value };
+        return Promise.resolve(value);
+      });
+    });
+
+    it('updates the sent user fields in the same save and returns them', async () => {
+      const updated = await service.updateProfile('u1', {
+        user: { fullName: 'Alex Plumber', postcode: 'SW3' },
+      });
+      expect(updated.user).toEqual({
+        fullName: 'Alex Plumber',
+        email: 'alex@example.com',
+        photoUrl: null,
+        address: '1 High St',
+        postcode: 'SW3',
+      });
+      expect(providerRepo.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves user fields alone when omitted or explicitly undefined', async () => {
+      // a validated DTO instance carries omitted fields as own `undefined` properties
+      const updated = await service.updateProfile('u1', {
+        bio: 'Electrician',
+        user: { fullName: undefined, address: '2 Low St', postcode: undefined },
+      });
+      expect(updated.bio).toBe('Electrician');
+      expect(updated.user).toMatchObject({
+        fullName: 'Alex Pro',
+        address: '2 Low St',
+        postcode: 'SW1',
+      });
+    });
+
+    it('the real validation pipe keeps the three user fields, strips email/role, rejects non-strings', async () => {
+      const pipe = new ValidationPipe({ whitelist: true, transform: true });
+      const meta = {
+        type: 'body' as const,
+        metatype: UpdateProviderProfileDto,
+      };
+      const ok = (await pipe.transform(
+        {
+          user: {
+            fullName: 'A',
+            address: 'B',
+            postcode: 'C',
+            email: 'x@y.z',
+            role: 'ADMIN',
+          },
+        },
+        meta,
+      )) as UpdateProviderProfileDto;
+      expect(ok.user).toEqual(
+        expect.objectContaining({ fullName: 'A', address: 'B', postcode: 'C' }),
+      );
+      expect(ok.user).not.toHaveProperty('email');
+      expect(ok.user).not.toHaveProperty('role');
+      await expect(
+        pipe.transform({ user: { fullName: 123 } }, meta),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

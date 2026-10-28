@@ -7,9 +7,15 @@ import {
   IsUUID,
   ValidateNested,
 } from 'class-validator';
+import { UpdateProviderUserDto } from './update-provider-user.dto';
 import { AvailabilitySlotDto } from './availability-slot.dto';
 
 export class UpdateProviderProfileDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => UpdateProviderUserDto)
+  user?: UpdateProviderUserDto;
+
   @IsOptional()
   @IsString()
   bio?: string;

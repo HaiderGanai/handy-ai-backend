@@ -106,6 +106,13 @@ exactly as before plus a `user` object projected to `fullName`, `email`, `photoU
 fields, so it is never returned whole). `PATCH` saves and then re-reads through the same
 `getProfile`, so the two responses can't drift apart.
 
+`PATCH` also accepts a nested `user: { fullName?, address?, postcode? }`
+(`UpdateProviderUserDto`) with the same per-field `!== undefined` rule. The `Provider.user`
+relation has `cascade: ['update']`, so the user fields are written by the same `save()`
+(TypeORM runs it as one transaction) — no second repository or manual transaction. `email`
+and `photoUrl` are deliberately not accepted. Side effect to remember: any code that loads a
+provider *with* `user` and saves it will also persist changes made to that user object.
+
 ### Document upload — `POST /provider/documents`
 1. `FileFieldsInterceptor` is configured with five fields named after `DocumentType`,
    `maxCount: 1` each, and a 5 MB per-file limit. The multipart **field name is the

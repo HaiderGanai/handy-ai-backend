@@ -24,7 +24,8 @@ export class Provider {
   @Column({ type: 'uuid', unique: true })
   userId: string;
 
-  @OneToOne(() => User, { onDelete: 'CASCADE' })
+  // cascade update: PATCH /provider/profile edits the user's name/address/postcode in the same save
+  @OneToOne(() => User, { onDelete: 'CASCADE', cascade: ['update'] })
   @JoinColumn({ name: 'userId' })
   user: User;
 
