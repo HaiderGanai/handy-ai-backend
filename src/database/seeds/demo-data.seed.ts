@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import * as bcrypt from 'bcryptjs';
-import { DataSource, In } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { SubService } from '../../catalog/entities/sub-service.entity';
 import { ServiceCategory } from '../../catalog/entities/service-category.entity';
 import { ServiceCategoryName } from '../../catalog/enums/service-category-name.enum';
@@ -473,7 +473,9 @@ async function seed(dataSource: DataSource): Promise<void> {
             ),
         )
       ) {
-        throw new Error(`Overlap for ${spec.provider} at ${scheduledAt}`);
+        throw new Error(
+          `Overlap for ${spec.provider} at ${scheduledAt.toISOString()}`,
+        );
       }
 
       const createdAt = new Date(
@@ -524,12 +526,12 @@ async function main(): Promise<void> {
       return;
     }
     await seed(dataSource);
-    const count = async (table: string, where = 'TRUE') =>
-      (
-        await dataSource.query(
-          `SELECT count(*)::int AS n FROM ${table} WHERE ${where}`,
-        )
-      )[0].n;
+    const count = async (table: string, where = 'TRUE'): Promise<number> => {
+      const rows: { n: number }[] = await dataSource.query(
+        `SELECT count(*)::int AS n FROM ${table} WHERE ${where}`,
+      );
+      return rows[0].n;
+    };
     console.log(
       `Seeded: ${CUSTOMERS.length} customers, ${PROVIDERS.length} providers, ` +
         `${await count('bookings', `"userId" IN (SELECT id FROM users WHERE email LIKE '%${DEMO_DOMAIN}')`)} bookings, ` +
