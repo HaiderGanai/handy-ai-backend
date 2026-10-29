@@ -247,6 +247,14 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
   delete-style test scripts while `.env` points at the server. Phase 4 migration is applied on
   the server. `.env` can't be `source`d in a shell anymore (the `&` in the URL) - the app's
   dotenv/ConfigModule reads it fine.
+- 2026-10-29 - Demo data for frontend testing: `npm run seed:demo` / `seed:demo:remove`
+  (`src/database/seeds/demo-data.seed.ts`, reference in `DEMO_DATA.md`). 5 customers + 6
+  providers (all `@handyai-demo.dev`, password `Demo@1234`, email verified, providers APPROVED
+  with 5 APPROVED documents) and 22 bookings covering every status. Re-runnable; it only ever
+  deletes/creates rows with that email domain, validates each booking against the plan rules,
+  and prints its target host. Seeded into the **server** DB on the user's say-so (39 other
+  users untouched); the same script also ran on local as a dry run. Dates are relative to the
+  run, so re-run to refresh. Dev only - don't seed production with a public password.
 
 ## Conventions
 

@@ -20,7 +20,9 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
-    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts"
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
+    "seed:demo": "ts-node src/database/seeds/demo-data.seed.ts",
+    "seed:demo:remove": "ts-node src/database/seeds/demo-data.seed.ts --remove"
   },
   "dependencies": {
     "@keyv/redis": "^5.1.6",
