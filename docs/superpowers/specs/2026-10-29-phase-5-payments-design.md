@@ -27,7 +27,7 @@ Stripe dashboard (no refund endpoint).
 
 ## Data (one migration)
 - `transactions` (new): `id`, `bookingId` (unique), `stripeCheckoutSessionId`,
-  `stripePaymentIntentId`, `amountCents`, `commissionCents` = `floor(amount*0.20)`,
+  `stripePaymentIntentId`, `stripeChargeId` (set at capture; the payout Transfer uses it as `source_transaction` so it works before the captured funds are available), `amountCents`, `commissionCents` = `floor(amount*0.20)`,
   `providerPayoutCents` = `amount - commission`, `status` `HELD | CAPTURED | RELEASED |
   CANCELLED`, `stripeTransferId` (nullable), timestamps. Amounts copied from
   `Booking.priceCents` at creation. No `REFUNDED` (manual refunds).
@@ -65,8 +65,17 @@ Stripe dashboard (no refund endpoint).
 - Customer abandons Checkout: `checkout.session.expired` → booking `CANCELLED`, slot freed
   (no scheduled job).
 - Provider declines / customer cancels (any status where a hold exists): cancel the
-  PaymentIntent, transaction `CANCELLED`. Cancelling a `PENDING_PAYMENT` booking expires the
-  Checkout Session.
+  PaymentIntent, transaction `CANCELLED`. Cancelling a `PENDING_PAYMENT` booking just cancels
+  the booking; if the customer still pays on the open Checkout page, the
+  `checkout.session.completed` handler sees a non-`PENDING_PAYMENT` booking and cancels that
+  PaymentIntent (same guard covers a payment landing after expiry).
+- Release failures (Stripe error while cancelling a hold) are logged, not thrown: the booking
+  change stands, the transaction stays `HELD` for admin visibility, and the hold lapses by
+  itself within 7 days.
+- Bookings created before payments existed have no transaction; `complete` skips the capture
+  for them.
+- Providers never see `PENDING_PAYMENT` bookings (lists, detail and every action return 404).
+- The 7-day horizon applies to plan, create and time edits.
 - Admin reassign: payment untouched; the transfer goes to whoever completes the job.
 - Capture fails at `complete`: 502, booking stays `IN_PROGRESS`, provider retries.
 - Capture succeeds, Transfer fails: transaction stays `CAPTURED`; retried by the next
