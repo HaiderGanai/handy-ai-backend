@@ -62,6 +62,10 @@ export class User {
   @Column({ type: 'text', nullable: true })
   householdNotes: string | null;
 
+  @Exclude()
+  @Column({ type: 'varchar', nullable: true })
+  stripeCustomerId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

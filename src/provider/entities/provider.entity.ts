@@ -49,6 +49,10 @@ export class Provider {
   @Column({ type: 'varchar', nullable: true })
   stripeAccountId: string | null;
 
+  // true once Stripe says payouts are enabled (account.updated webhook)
+  @Column({ default: false })
+  stripeOnboarded: boolean;
+
   @ManyToMany(() => ServiceCategory)
   @JoinTable({ name: 'provider_service_categories' })
   categories: ServiceCategory[];
