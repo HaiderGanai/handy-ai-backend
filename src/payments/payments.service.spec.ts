@@ -1,4 +1,4 @@
-import { BadGatewayException, Logger } from '@nestjs/common';
+import { BadGatewayException, Logger, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Provider } from '../provider/entities/provider.entity';
@@ -257,6 +257,141 @@ describe('PaymentsService', () => {
     it('cancels the PaymentIntent', async () => {
       await service.cancelUnclaimedHold('pi_9');
       expect(stripe.cancelPaymentIntent).toHaveBeenCalledWith('pi_9');
+    });
+  });
+
+  describe('connectStripeAccount', () => {
+    it('creates an Express account once, stores it and returns the onboarding link', async () => {
+      providerRepo.findOne.mockResolvedValue({
+        id: 'p1',
+        stripeAccountId: null,
+        user: { email: 'pro@x.co' },
+      });
+      stripe.createConnectedAccount.mockResolvedValue('acct_new');
+      stripe.createAccountLink.mockResolvedValue(
+        'https://connect.test/onboard',
+      );
+
+      const result = await service.connectStripeAccount('pu1');
+
+      expect(stripe.createConnectedAccount).toHaveBeenCalledWith(
+        'pro@x.co',
+        'p1',
+      );
+      expect(providerRepo.update).toHaveBeenCalledWith('p1', {
+        stripeAccountId: 'acct_new',
+      });
+      expect(stripe.createAccountLink).toHaveBeenCalledWith('acct_new');
+      expect(result).toEqual({ onboardingUrl: 'https://connect.test/onboard' });
+    });
+
+    it('reuses the existing account (a provider can come back to finish onboarding)', async () => {
+      providerRepo.findOne.mockResolvedValue({
+        id: 'p1',
+        stripeAccountId: 'acct_old',
+        user: { email: 'pro@x.co' },
+      });
+      stripe.createAccountLink.mockResolvedValue('https://connect.test/again');
+      await service.connectStripeAccount('pu1');
+      expect(stripe.createConnectedAccount).not.toHaveBeenCalled();
+      expect(stripe.createAccountLink).toHaveBeenCalledWith('acct_old');
+    });
+
+    it('404 when the user has no provider profile', async () => {
+      providerRepo.findOne.mockResolvedValue(null);
+      await expect(service.connectStripeAccount('x')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('getEarnings', () => {
+    const row = (over: object) => ({
+      id: 't',
+      bookingId: 'b',
+      status: TransactionStatus.RELEASED,
+      providerPayoutCents: 1000,
+      booking: {
+        scheduledAt: new Date('2030-01-01T10:00:00Z'),
+        subService: { name: 'Clean' },
+      },
+      ...over,
+    });
+
+    it('totals released, awaiting-payout and held money and ignores cancelled holds', async () => {
+      txRepo.find.mockResolvedValue([
+        row({ status: TransactionStatus.RELEASED, providerPayoutCents: 6400 }),
+        row({ status: TransactionStatus.CAPTURED, providerPayoutCents: 800 }),
+        row({ status: TransactionStatus.HELD, providerPayoutCents: 2000 }),
+        row({ status: TransactionStatus.CANCELLED, providerPayoutCents: 9999 }),
+      ]);
+      const result = await service.getEarnings('pu1');
+      expect(result).toMatchObject({
+        releasedCents: 6400,
+        awaitingPayoutCents: 800,
+        heldCents: 2000,
+        stripeConnected: true,
+      });
+      expect(result.jobs).toHaveLength(3);
+    });
+
+    it('reports stripeConnected false for a provider who skipped Stripe', async () => {
+      providerRepo.findOne.mockResolvedValue({
+        id: 'p1',
+        stripeOnboarded: false,
+      });
+      txRepo.find.mockResolvedValue([]);
+      await expect(service.getEarnings('pu1')).resolves.toMatchObject({
+        stripeConnected: false,
+        releasedCents: 0,
+      });
+    });
+  });
+
+  describe('getReceipts', () => {
+    it("lists the customer's paid bookings", async () => {
+      txRepo.find.mockResolvedValue([
+        {
+          id: 't1',
+          bookingId: 'b1',
+          amountCents: 8000,
+          createdAt: new Date('2030-01-01T00:00:00Z'),
+          booking: {
+            scheduledAt: new Date('2030-01-02T10:00:00Z'),
+            subService: { name: 'Deep clean' },
+          },
+        },
+      ]);
+      await expect(service.getReceipts('c1')).resolves.toEqual([
+        {
+          transactionId: 't1',
+          bookingId: 'b1',
+          serviceName: 'Deep clean',
+          scheduledAt: new Date('2030-01-02T10:00:00Z'),
+          amountCents: 8000,
+          createdAt: new Date('2030-01-01T00:00:00Z'),
+        },
+      ]);
+    });
+  });
+
+  describe('listTransactions', () => {
+    it('filters by status when given', async () => {
+      txRepo.find.mockResolvedValue([]);
+      await service.listTransactions({ status: TransactionStatus.HELD });
+      expect(txRepo.find).toHaveBeenCalledWith({
+        where: { status: TransactionStatus.HELD },
+        order: { createdAt: 'DESC' },
+      });
+    });
+
+    it('lists everything without a filter', async () => {
+      txRepo.find.mockResolvedValue([]);
+      await service.listTransactions({});
+      expect(txRepo.find).toHaveBeenCalledWith({
+        where: {},
+        order: { createdAt: 'DESC' },
+      });
     });
   });
 });

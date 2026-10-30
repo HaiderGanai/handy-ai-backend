@@ -6,10 +6,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Booking } from '../booking/entities/booking.entity';
 import { Provider } from '../provider/entities/provider.entity';
 import { User } from '../user/entities/user.entity';
+import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 import { Transaction } from './entities/transaction.entity';
 import { TransactionStatus } from './enums/transaction-status.enum';
 import { StripeService } from './stripe.service';
@@ -120,6 +121,98 @@ export class PaymentsService {
     await this.stripeCall(() =>
       this.stripeService.cancelPaymentIntent(paymentIntentId),
     );
+  }
+
+  // optional, any time: a provider who skipped Stripe at onboarding connects later
+  async connectStripeAccount(
+    userId: string,
+  ): Promise<{ onboardingUrl: string }> {
+    const provider = await this.providerRepository.findOne({
+      where: { userId },
+      relations: { user: true },
+    });
+    if (!provider) {
+      throw new NotFoundException('Provider profile not found!');
+    }
+    let accountId = provider.stripeAccountId;
+    if (!accountId) {
+      accountId = await this.stripeCall(() =>
+        this.stripeService.createConnectedAccount(
+          provider.user.email,
+          provider.id,
+        ),
+      );
+      await this.providerRepository.update(provider.id, {
+        stripeAccountId: accountId,
+      });
+    }
+    const connectedAccountId = accountId;
+    const onboardingUrl = await this.stripeCall(() =>
+      this.stripeService.createAccountLink(connectedAccountId),
+    );
+    return { onboardingUrl };
+  }
+
+  async getEarnings(userId: string) {
+    const provider = await this.providerRepository.findOne({
+      where: { userId },
+    });
+    if (!provider) {
+      throw new NotFoundException('Provider profile not found!');
+    }
+    const rows = await this.transactionRepository.find({
+      where: { booking: { providerId: provider.id } },
+      relations: { booking: { subService: true } },
+      order: { createdAt: 'DESC' },
+    });
+    const live = rows.filter(
+      (row) => row.status !== TransactionStatus.CANCELLED,
+    );
+    const total = (status: TransactionStatus) =>
+      live
+        .filter((row) => row.status === status)
+        .reduce((sum, row) => sum + row.providerPayoutCents, 0);
+    return {
+      releasedCents: total(TransactionStatus.RELEASED),
+      awaitingPayoutCents: total(TransactionStatus.CAPTURED),
+      heldCents: total(TransactionStatus.HELD),
+      stripeConnected: provider.stripeOnboarded,
+      jobs: live.map((row) => ({
+        bookingId: row.bookingId,
+        serviceName: row.booking.subService.name,
+        scheduledAt: row.booking.scheduledAt,
+        status: row.status,
+        providerPayoutCents: row.providerPayoutCents,
+      })),
+    };
+  }
+
+  async getReceipts(userId: string) {
+    const rows = await this.transactionRepository.find({
+      where: {
+        status: In([TransactionStatus.CAPTURED, TransactionStatus.RELEASED]),
+        booking: { userId },
+      },
+      relations: { booking: { subService: true } },
+      order: { createdAt: 'DESC' },
+    });
+    return rows.map((row) => ({
+      transactionId: row.id,
+      bookingId: row.bookingId,
+      serviceName: row.booking.subService.name,
+      scheduledAt: row.booking.scheduledAt,
+      amountCents: row.amountCents,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async listTransactions(
+    query: ListTransactionsQueryDto,
+  ): Promise<Transaction[]> {
+    return this.transactionRepository.find({
+      where: query.status ? { status: query.status } : {},
+      order: { createdAt: 'DESC' },
+    });
   }
 
   private async tryPayout(

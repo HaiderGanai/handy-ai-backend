@@ -5,6 +5,7 @@ import { Provider } from '../provider/entities/provider.entity';
 import { User } from '../user/entities/user.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { Transaction } from './entities/transaction.entity';
+import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { StripeWebhookController } from './stripe-webhook.controller';
 import { StripeWebhookService } from './stripe-webhook.service';
@@ -15,7 +16,7 @@ import { StripeService } from './stripe.service';
     TypeOrmModule.forFeature([Transaction, Booking, Provider, User]),
     NotificationsModule,
   ],
-  controllers: [StripeWebhookController],
+  controllers: [StripeWebhookController, PaymentsController],
   providers: [PaymentsService, StripeService, StripeWebhookService],
   exports: [PaymentsService],
 })
