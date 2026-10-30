@@ -17,7 +17,7 @@ import { UpdateBookingDto } from '../dto/update-booking.dto';
 import { Booking } from '../entities/booking.entity';
 import { TrustedProvider } from '../entities/trusted-provider.entity';
 import { BookingStatus } from '../enums/booking-status.enum';
-import { assertInFuture } from '../eligibility';
+import { assertInFuture, assertWithinHorizon } from '../eligibility';
 import { BookingPlanService } from './booking-plan.service';
 
 const EDITABLE_STATUSES = [
@@ -45,6 +45,7 @@ export class BookingService {
     data: CreateBookingDto,
   ): Promise<Booking> {
     assertInFuture(data.scheduledAt);
+    assertWithinHorizon(data.scheduledAt);
     // price/duration come from the catalog, never from the client
     const subService = await this.bookingPlanService.getSubService(
       data.subServiceId,
@@ -137,6 +138,7 @@ export class BookingService {
       data.scheduledAt.getTime() !== booking.scheduledAt.getTime()
     ) {
       assertInFuture(data.scheduledAt);
+      assertWithinHorizon(data.scheduledAt);
       const subService = await this.bookingPlanService.getSubService(
         booking.subServiceId,
       );

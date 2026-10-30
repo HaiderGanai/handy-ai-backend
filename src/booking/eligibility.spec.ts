@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import {
   assertInFuture,
+  assertWithinHorizon,
   coversPostcode,
   isWithinAvailability,
   overlaps,
@@ -42,5 +43,17 @@ describe('eligibility helpers', () => {
     expect(() =>
       assertInFuture(new Date('2999-01-01T00:00:00Z')),
     ).not.toThrow();
+  });
+});
+
+describe('assertWithinHorizon', () => {
+  const inDays = (days: number) => new Date(Date.now() + days * 86_400_000);
+
+  it('allows a time inside 7 days', () => {
+    expect(() => assertWithinHorizon(inDays(6))).not.toThrow();
+  });
+
+  it('rejects a time more than 7 days away with 400', () => {
+    expect(() => assertWithinHorizon(inDays(8))).toThrow(BadRequestException);
   });
 });

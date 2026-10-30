@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
@@ -19,6 +20,16 @@ import { BookingService } from './booking.service';
 
 describe('BookingService', () => {
   let service: BookingService;
+
+  // freeze "now" so the year-2999 test dates sit inside the 7-day booking horizon
+  beforeAll(() => {
+    jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(new Date('2998-12-30T00:00:00Z').getTime());
+  });
+  afterAll(() => {
+    jest.restoreAllMocks();
+  });
   const bookingRepo = {
     findOne: jest.fn(),
     find: jest.fn(),
@@ -109,6 +120,29 @@ describe('BookingService', () => {
         ConflictException,
       );
       expect(bookingRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('booking horizon', () => {
+    const tooFar = new Date('2999-02-01T10:00:00Z');
+
+    it('createBooking rejects a time more than 7 days ahead without saving', async () => {
+      await expect(
+        service.createBooking('c1', {
+          subServiceId: 's1',
+          scheduledAt: tooFar,
+          providerId: 'p1',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(bookingRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('updateBooking rejects moving a booking more than 7 days ahead', async () => {
+      bookingRepo.findOne.mockResolvedValue(makeBooking());
+      await expect(
+        service.updateBooking('c1', 'b1', { scheduledAt: tooFar }),
+      ).rejects.toThrow(BadRequestException);
+      expect(bookingRepo.update).not.toHaveBeenCalled();
     });
   });
 

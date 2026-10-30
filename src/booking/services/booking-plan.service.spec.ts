@@ -11,6 +11,16 @@ import { BookingPlanService } from './booking-plan.service';
 
 describe('BookingPlanService', () => {
   let service: BookingPlanService;
+
+  // freeze "now" so the 2030 test dates sit inside the 7-day booking horizon
+  beforeAll(() => {
+    jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(new Date('2030-01-03T00:00:00Z').getTime());
+  });
+  afterAll(() => {
+    jest.restoreAllMocks();
+  });
   const providerRepo = { find: jest.fn(), findOne: jest.fn() };
   const subServiceRepo = { findOne: jest.fn() };
   const bookingRepo = { find: jest.fn() };
@@ -63,6 +73,15 @@ describe('BookingPlanService', () => {
     await expect(service.planBooking('c1', request)).rejects.toThrow(
       BadRequestException,
     );
+  });
+
+  it('rejects a time more than 7 days ahead', async () => {
+    await expect(
+      service.planBooking('c1', {
+        ...request,
+        scheduledAt: new Date('2030-02-01T10:00:00Z'),
+      }),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it('rejects a time in the past', async () => {

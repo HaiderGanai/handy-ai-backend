@@ -57,3 +57,15 @@ export function assertInFuture(date: Date): void {
     throw new BadRequestException('Booking time must be in the future!');
   }
 }
+
+// card holds expire after 7 days, so a booking can't be further out than that
+// ponytail: a job on the very last day can finish after the hold lapsed; shrink the horizon if that bites
+export const BOOKING_HORIZON_DAYS = 7;
+
+export function assertWithinHorizon(date: Date): void {
+  if (date.getTime() > Date.now() + BOOKING_HORIZON_DAYS * 86_400_000) {
+    throw new BadRequestException(
+      `Bookings can be made up to ${BOOKING_HORIZON_DAYS} days ahead!`,
+    );
+  }
+}

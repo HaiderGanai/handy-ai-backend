@@ -16,6 +16,7 @@ import { TrustedProvider } from '../entities/trusted-provider.entity';
 import { ACTIVE_BOOKING_STATUSES } from '../enums/booking-status.enum';
 import {
   assertInFuture,
+  assertWithinHorizon,
   coversPostcode,
   EligibilityContext,
   isWithinAvailability,
@@ -54,6 +55,7 @@ export class BookingPlanService {
     data: PlanBookingDto,
   ): Promise<BookingPlan> {
     assertInFuture(data.scheduledAt);
+    assertWithinHorizon(data.scheduledAt);
     const subService = await this.getSubService(data.subServiceId);
     const postcode = await this.getPostcode(userId);
     const context: EligibilityContext = {
