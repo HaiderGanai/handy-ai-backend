@@ -49,6 +49,15 @@ export class BookingController {
     return this.bookingService.createBooking(req.user.id, body);
   }
 
+  @Post('/:id/checkout')
+  @Roles(Role.CUSTOMER)
+  async createBookingCheckout(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.bookingService.createBookingCheckout(req.user.id, id);
+  }
+
   @Get()
   @Roles(Role.CUSTOMER, Role.PROVIDER)
   async listBookings(

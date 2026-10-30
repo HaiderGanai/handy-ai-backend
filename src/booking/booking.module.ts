@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubService } from '../catalog/entities/sub-service.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PaymentsModule } from '../payments/payments.module';
 import { Provider } from '../provider/entities/provider.entity';
 import { User } from '../user/entities/user.entity';
 import { AdminBookingController } from './admin-booking.controller';
@@ -23,6 +24,7 @@ import { BookingService } from './services/booking.service';
       User,
     ]),
     NotificationsModule,
+    PaymentsModule,
   ],
   controllers: [
     BookingController,

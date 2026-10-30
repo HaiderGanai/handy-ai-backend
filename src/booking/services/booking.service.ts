@@ -5,8 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Not, Repository } from 'typeorm';
+import { FindOptionsWhere, In, Not, Repository } from 'typeorm';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { PaymentsService } from '../../payments/payments.service';
 import { Provider } from '../../provider/entities/provider.entity';
 import { ProviderStatus } from '../../provider/enums/provider-status.enum';
 import { User } from '../../user/entities/user.entity';
@@ -25,6 +26,17 @@ const EDITABLE_STATUSES = [
   BookingStatus.CONFIRMED,
 ];
 
+// an unpaid booking can also be cancelled
+const CANCELLABLE_STATUSES = [
+  BookingStatus.PENDING_PAYMENT,
+  ...EDITABLE_STATUSES,
+];
+
+type TransitionHooks = {
+  before?: (booking: Booking) => Promise<void>;
+  after?: (booking: Booking) => Promise<void>;
+};
+
 @Injectable()
 export class BookingService {
   constructor(
@@ -38,12 +50,13 @@ export class BookingService {
     private readonly userRepository: Repository<User>,
     private readonly bookingPlanService: BookingPlanService,
     private readonly notificationsService: NotificationsService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   async createBooking(
     userId: string,
     data: CreateBookingDto,
-  ): Promise<Booking> {
+  ): Promise<{ booking: Booking; checkoutUrl: string }> {
     assertInFuture(data.scheduledAt);
     assertWithinHorizon(data.scheduledAt);
     // price/duration come from the catalog, never from the client
@@ -70,14 +83,40 @@ export class BookingService {
         scheduledAt: data.scheduledAt,
         durationMinutes: subService.baseDurationMinutes,
         priceCents: subService.basePriceCents,
-        status: BookingStatus.PENDING_PROVIDER,
+        status: BookingStatus.PENDING_PAYMENT,
         notes: data.notes ?? null,
       }),
     );
-    this.notificationsService.notify(provider.userId, 'BOOKING_REQUESTED', {
-      bookingId: booking.id,
-    });
-    return booking;
+    try {
+      const checkoutUrl = await this.paymentsService.createCheckout(
+        booking,
+        subService.name,
+      );
+      // the provider is told once the payment webhook confirms the card hold
+      return { booking, checkoutUrl };
+    } catch (error) {
+      await this.bookingRepository.delete(booking.id); // no orphan booking if Stripe is down
+      throw error;
+    }
+  }
+
+  async createBookingCheckout(
+    userId: string,
+    id: string,
+  ): Promise<{ checkoutUrl: string }> {
+    const booking = await this.getOwnedBooking(userId, id);
+    if (booking.status !== BookingStatus.PENDING_PAYMENT) {
+      throw new ConflictException('Booking is not waiting for payment!');
+    }
+    const subService = await this.bookingPlanService.getSubService(
+      booking.subServiceId,
+    );
+    return {
+      checkoutUrl: await this.paymentsService.createCheckout(
+        booking,
+        subService.name,
+      ),
+    };
   }
 
   async acceptBooking(userId: string, id: string): Promise<Booking> {
@@ -97,6 +136,7 @@ export class BookingService {
       BookingStatus.PENDING_PROVIDER,
       BookingStatus.DECLINED,
       'BOOKING_DECLINED',
+      { after: (booking) => this.paymentsService.releaseHold(booking.id) },
     );
   }
 
@@ -111,13 +151,14 @@ export class BookingService {
   }
 
   async completeBooking(userId: string, id: string): Promise<Booking> {
-    // Phase 5: capture the PaymentIntent here (releases the hold + 80/20 split)
     return this.transitionAsProvider(
       userId,
       id,
       BookingStatus.IN_PROGRESS,
       BookingStatus.COMPLETED,
       'BOOKING_COMPLETED',
+      // capture first: if Stripe fails the booking stays IN_PROGRESS and the provider retries
+      { before: (booking) => this.paymentsService.captureAndPayout(booking) },
     );
   }
 
@@ -173,17 +214,23 @@ export class BookingService {
 
   async cancelBooking(userId: string, id: string): Promise<Booking> {
     const booking = await this.getOwnedBooking(userId, id);
-    if (!EDITABLE_STATUSES.includes(booking.status)) {
+    if (!CANCELLABLE_STATUSES.includes(booking.status)) {
       throw new ConflictException('Only upcoming bookings can be cancelled!');
     }
+    // updateWhileStatus mutates the booking, so read this first
+    const wasPaid = booking.status !== BookingStatus.PENDING_PAYMENT;
     const saved = await this.updateWhileStatus(booking, {
       status: BookingStatus.CANCELLED,
     });
-    this.notificationsService.notify(
-      booking.provider.userId,
-      'BOOKING_CANCELLED',
-      { bookingId: booking.id },
-    );
+    await this.paymentsService.releaseHold(booking.id);
+    // a booking nobody has paid for yet was never shown to the provider
+    if (wasPaid) {
+      this.notificationsService.notify(
+        booking.provider.userId,
+        'BOOKING_CANCELLED',
+        { bookingId: booking.id },
+      );
+    }
     return saved;
   }
 
@@ -194,11 +241,12 @@ export class BookingService {
     role: Role,
     query: ListBookingsQueryDto,
   ): Promise<Booking[]> {
-    return this.findForUser(
-      userId,
-      role,
-      query.status ?? Not(BookingStatus.IN_PROGRESS),
-    );
+    // providers also never see bookings still waiting for the customer's payment
+    const hidden =
+      role === Role.PROVIDER
+        ? Not(In([BookingStatus.IN_PROGRESS, BookingStatus.PENDING_PAYMENT]))
+        : Not(BookingStatus.IN_PROGRESS);
+    return this.findForUser(userId, role, query.status ?? hidden);
   }
 
   async listInProgressBookings(userId: string, role: Role): Promise<Booking[]> {
@@ -212,7 +260,9 @@ export class BookingService {
     });
     const isOwner = booking?.userId === userId;
     const isAssignedProvider =
-      role === Role.PROVIDER && booking?.provider.userId === userId;
+      role === Role.PROVIDER &&
+      booking?.provider.userId === userId &&
+      booking.status !== BookingStatus.PENDING_PAYMENT;
     if (!booking || !(isOwner || isAssignedProvider || role === Role.ADMIN)) {
       throw new NotFoundException('Booking not found!');
     }
@@ -276,6 +326,9 @@ export class BookingService {
     role: Role,
     status: FindOptionsWhere<Booking>['status'],
   ): Promise<Booking[]> {
+    if (role === Role.PROVIDER && status === BookingStatus.PENDING_PAYMENT) {
+      return [];
+    }
     const owner =
       role === Role.PROVIDER
         ? { providerId: (await this.getProviderForUser(userId)).id }
@@ -293,6 +346,7 @@ export class BookingService {
     from: BookingStatus,
     to: BookingStatus,
     event: string,
+    hooks: TransitionHooks = {},
   ): Promise<Booking> {
     const provider = await this.getProviderForUser(userId);
     // a disabled provider may decline or finish work already on their plate, not take on more
@@ -304,7 +358,7 @@ export class BookingService {
     const booking = await this.bookingRepository.findOne({
       where: { id, providerId: provider.id },
     });
-    if (!booking) {
+    if (!booking || booking.status === BookingStatus.PENDING_PAYMENT) {
       throw new NotFoundException('Booking not found!');
     }
     if (booking.status !== from) {
@@ -312,7 +366,9 @@ export class BookingService {
         `Booking is ${booking.status}, expected ${from}!`,
       );
     }
+    await hooks.before?.(booking);
     const saved = await this.updateWhileStatus(booking, { status: to });
+    await hooks.after?.(saved);
     this.notificationsService.notify(booking.userId, event, {
       bookingId: booking.id,
     });

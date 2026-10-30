@@ -6,8 +6,9 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Not } from 'typeorm';
+import { In, Not } from 'typeorm';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { PaymentsService } from '../../payments/payments.service';
 import { Provider } from '../../provider/entities/provider.entity';
 import { ProviderStatus } from '../../provider/enums/provider-status.enum';
 import { User } from '../../user/entities/user.entity';
@@ -35,6 +36,7 @@ describe('BookingService', () => {
     find: jest.fn(),
     exists: jest.fn(),
     update: jest.fn(),
+    delete: jest.fn(),
     create: jest.fn((v: object) => v),
     save: jest.fn((v: object) => Promise.resolve({ id: 'b1', ...v })),
   };
@@ -47,6 +49,11 @@ describe('BookingService', () => {
     assertEligible: jest.fn(),
   };
   const notifications = { notify: jest.fn() };
+  const payments = {
+    createCheckout: jest.fn(),
+    releaseHold: jest.fn(),
+    captureAndPayout: jest.fn(),
+  };
 
   const future = new Date('2999-01-01T10:00:00Z');
   const makeBooking = (over: object = {}) => ({
@@ -73,6 +80,7 @@ describe('BookingService', () => {
     jest.clearAllMocks();
     planService.getSubService.mockResolvedValue({
       id: 's1',
+      name: 'Regular home clean',
       categoryId: 'cat1',
       basePriceCents: 12000,
       baseDurationMinutes: 60,
@@ -80,6 +88,9 @@ describe('BookingService', () => {
     planService.getPostcode.mockResolvedValue('SW1A 1AA');
     planService.assertEligible.mockResolvedValue({ id: 'p1', userId: 'pu1' });
     bookingRepo.update.mockResolvedValue({ affected: 1 });
+    payments.createCheckout.mockResolvedValue('https://pay.test/c1');
+    payments.releaseHold.mockResolvedValue(undefined);
+    payments.captureAndPayout.mockResolvedValue(undefined);
     providerRepo.findOne.mockResolvedValue({
       id: 'p1',
       userId: 'pu1',
@@ -94,6 +105,7 @@ describe('BookingService', () => {
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: BookingPlanService, useValue: planService },
         { provide: NotificationsService, useValue: notifications },
+        { provide: PaymentsService, useValue: payments },
       ],
     }).compile();
     service = module.get(BookingService);
@@ -102,16 +114,29 @@ describe('BookingService', () => {
   describe('createBooking', () => {
     const data = { subServiceId: 's1', scheduledAt: future, providerId: 'p1' };
 
-    it('creates a PENDING_PROVIDER booking priced from the catalog and notifies the provider', async () => {
-      const booking = await service.createBooking('c1', data);
-      expect(booking.status).toBe(BookingStatus.PENDING_PROVIDER);
-      expect(booking.priceCents).toBe(12000);
-      expect(booking.durationMinutes).toBe(60);
-      expect(notifications.notify).toHaveBeenCalledWith(
-        'pu1',
-        'BOOKING_REQUESTED',
-        expect.any(Object),
+    it('creates a PENDING_PAYMENT booking priced from the catalog and returns the checkout url', async () => {
+      const result = await service.createBooking('c1', data);
+      expect(result.booking.status).toBe(BookingStatus.PENDING_PAYMENT);
+      expect(result.booking.priceCents).toBe(12000);
+      expect(result.booking.durationMinutes).toBe(60);
+      expect(result.checkoutUrl).toBe('https://pay.test/c1');
+      expect(payments.createCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'b1', priceCents: 12000 }),
+        'Regular home clean',
       );
+    });
+
+    it('does not tell the provider until the customer has paid', async () => {
+      await service.createBooking('c1', data);
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('removes the booking again when the checkout cannot be created', async () => {
+      payments.createCheckout.mockRejectedValue(new Error('stripe down'));
+      await expect(service.createBooking('c1', data)).rejects.toThrow(
+        'stripe down',
+      );
+      expect(bookingRepo.delete).toHaveBeenCalledWith('b1');
     });
 
     it('does not save when the provider is not eligible', async () => {
@@ -120,6 +145,138 @@ describe('BookingService', () => {
         ConflictException,
       );
       expect(bookingRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createBookingCheckout', () => {
+    it('issues a fresh checkout url while the booking awaits payment', async () => {
+      bookingRepo.findOne.mockResolvedValue(
+        makeBooking({ status: BookingStatus.PENDING_PAYMENT }),
+      );
+      await expect(service.createBookingCheckout('c1', 'b1')).resolves.toEqual({
+        checkoutUrl: 'https://pay.test/c1',
+      });
+    });
+
+    it('409 when the booking is not waiting for payment', async () => {
+      bookingRepo.findOne.mockResolvedValue(makeBooking());
+      await expect(service.createBookingCheckout('c1', 'b1')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it("404 for someone else's booking", async () => {
+      bookingRepo.findOne.mockResolvedValue(null);
+      await expect(service.createBookingCheckout('x', 'b1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('payments hooks', () => {
+    it('cancelling an unpaid booking cancels it without bothering the provider', async () => {
+      bookingRepo.findOne.mockResolvedValue(
+        makeBooking({ status: BookingStatus.PENDING_PAYMENT }),
+      );
+      const result = await service.cancelBooking('c1', 'b1');
+      expect(result.status).toBe(BookingStatus.CANCELLED);
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('cancelling a paid booking releases the card hold', async () => {
+      bookingRepo.findOne.mockResolvedValue(makeBooking());
+      await service.cancelBooking('c1', 'b1');
+      expect(payments.releaseHold).toHaveBeenCalledWith('b1');
+    });
+
+    it('declining releases the card hold', async () => {
+      bookingRepo.findOne.mockResolvedValue(makeBooking());
+      await service.declineBooking('pu1', 'b1');
+      expect(payments.releaseHold).toHaveBeenCalledWith('b1');
+    });
+
+    it('completing captures the payment before marking COMPLETED', async () => {
+      bookingRepo.findOne.mockResolvedValue(
+        makeBooking({ status: BookingStatus.IN_PROGRESS }),
+      );
+      const order: string[] = [];
+      payments.captureAndPayout.mockImplementation(() => {
+        order.push('capture');
+        return Promise.resolve();
+      });
+      bookingRepo.update.mockImplementation(() => {
+        order.push('update');
+        return Promise.resolve({ affected: 1 });
+      });
+      const result = await service.completeBooking('pu1', 'b1');
+      expect(order).toEqual(['capture', 'update']);
+      expect(result.status).toBe(BookingStatus.COMPLETED);
+    });
+
+    it('a failed capture leaves the booking IN_PROGRESS', async () => {
+      bookingRepo.findOne.mockResolvedValue(
+        makeBooking({ status: BookingStatus.IN_PROGRESS }),
+      );
+      payments.captureAndPayout.mockRejectedValue(new Error('capture failed'));
+      await expect(service.completeBooking('pu1', 'b1')).rejects.toThrow(
+        'capture failed',
+      );
+      expect(bookingRepo.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('providers and unpaid bookings', () => {
+    const unpaid = () => makeBooking({ status: BookingStatus.PENDING_PAYMENT });
+
+    it.each([
+      'acceptBooking',
+      'declineBooking',
+      'startBooking',
+      'completeBooking',
+    ] as const)('%s answers 404 for an unpaid booking', async (method) => {
+      bookingRepo.findOne.mockResolvedValue(unpaid());
+      await expect(service[method]('pu1', 'b1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('the assigned provider cannot read an unpaid booking', async () => {
+      bookingRepo.findOne.mockResolvedValue(unpaid());
+      await expect(
+        service.getBooking('pu1', Role.PROVIDER, 'b1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("the provider's list hides unpaid bookings but the customer's does not", async () => {
+      bookingRepo.find.mockResolvedValue([]);
+      await service.listBookings('pu1', Role.PROVIDER, {});
+      expect(bookingRepo.find).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: {
+            providerId: 'p1',
+            status: Not(
+              In([BookingStatus.IN_PROGRESS, BookingStatus.PENDING_PAYMENT]),
+            ),
+          },
+        }),
+      );
+      await service.listBookings('c1', Role.CUSTOMER, {});
+      expect(bookingRepo.find).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          where: { userId: 'c1', status: Not(BookingStatus.IN_PROGRESS) },
+        }),
+      );
+    });
+
+    it('an explicit ?status=PENDING_PAYMENT shows a provider nothing', async () => {
+      await expect(
+        service.listBookings('pu1', Role.PROVIDER, {
+          status: BookingStatus.PENDING_PAYMENT,
+        }),
+      ).resolves.toEqual([]);
+      expect(bookingRepo.find).not.toHaveBeenCalled();
     });
   });
 
