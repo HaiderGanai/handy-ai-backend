@@ -43,7 +43,7 @@ something that's *always* "my own profile" by definition.
 - nodemailer (SMTP) wrapped in `MailService`.
 - bcryptjs for password hashing.
 - multer (memory storage) + Cloudinary for all image/document uploads (avatars, provider documents). API keys arrive later, on demand — module is built now against env vars so nothing changes when the keys land.
-- Stripe (Connect Express accounts + Checkout/PaymentIntents, manual capture, destination charges, 20% `application_fee_amount`) — from Phase 5 onward.
+- Stripe (Checkout Sessions with manual capture on the platform account, then Transfers of 80% to providers' Connect Express accounts; the 20% commission is the untransferred part) — Phase 5.
 - class-validator/class-transformer for all DTOs.
 
 ## Phase status
@@ -57,7 +57,7 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
 | 2 | Service catalog (4 categories + sub-services, seeded) | Done |
 | 3 | Providers & vetting (onboarding, documents, admin approve/reject) | Done |
 | 4 | Bookings (plan → confirm → accept/decline → start → complete, trusted providers) | Done |
-| 5 | Payments (Stripe Connect, hold/release, 80/20 split) | Not started |
+| 5 | Payments (Stripe, hold/capture, 80/20 split) | Done |
 | 6 | In-app messaging (per booking, user↔provider) | Not started |
 | 7 | Notifications (FCM-ready interface, no-op impl for now) & contact support | Not started |
 | 8 | Admin platform stats | Not started |
@@ -72,9 +72,12 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
 - Booking-plan generation (Phase 4) is a deterministic flat-rate/rule-based stand-in
   for the eventual GPT-4 service — same controller/DTO contract either way, so
   swapping in the AI layer later shouldn't touch callers.
-- Payments use Stripe Connect **destination charges with manual capture** (not
-  separate charges+transfers) — capture on job completion both releases the hold and
-  triggers the provider payout/commission split in one Stripe call.
+- Payments use Stripe **separate charges and transfers** with manual capture (reversed
+  2026-10-29 from "destination charges"): the card is authorised at booking creation and
+  captured on the platform account at job completion, then 80% is Transferred to the
+  provider's Express account (or waits until they connect one). Destination charges
+  needed the provider's account at payment time, which contradicts "providers may skip
+  Stripe at onboarding".
 - Notifications built behind a `NotificationsService` interface from day one (even
   though FCM isn't wired until Phase 7) so booking-status hooks in earlier phases
   don't need to change later.
@@ -256,6 +259,27 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
   users untouched); the same script also ran on local as a dry run. Dates are relative to the
   run, so re-run to refresh. Dev only - don't seed production with a public password.
 
+- 2026-10-30 - Phase 5 complete (payments). Writeups: `PHASE_5_MODULE_GUIDE.md`, `PHASE_5_API.md`;
+  Postman "Payments" folder; spec/plan in `docs/superpowers/specs|plans/2026-10-29-phase-5-payments*`.
+  - **Pay-first booking:** `POST /bookings` now returns `{ booking, checkoutUrl }`; new status
+    `PENDING_PAYMENT` (holds the slot, invisible to providers - 404 everywhere, auto-cancelled by the
+    `checkout.session.expired` webhook after ~30 min). The Stripe webhook flips it to `PENDING_PROVIDER`
+    and notifies the provider. Scheduling is limited to **7 days ahead** (card holds expire after 7 days).
+  - **Provider Stripe is optional** (`POST /provider/stripe-account`, callable any time). Money for a
+    provider without a connected account stays `CAPTURED` and is sent automatically on `account.updated`.
+    Transfers use `source_transaction` (stored `stripeChargeId`) and idempotency key `payout-<txId>`.
+  - `StripeService` is the only file touching the SDK (`stripe` 23.x, CommonJS build works under Jest);
+    `rawBody: true` in `main.ts` for signature checks. New `transactions` table, `users.stripeCustomerId`
+    (`@Exclude`), `providers.stripeOnboarded`; migration `Phase5Payments1793900000000` ran **locally only**
+    - apply it on the server DB (and set the `STRIPE_*` env on the droplet) before deploying.
+  - Demo seed now also creates fake-Stripe-id `Transaction` rows (Grace has no Stripe account).
+  - Cancelling an unpaid booking does not expire its Checkout page; a late payment is caught by the
+    webhook (cancels that PaymentIntent). Hold-release failures are logged, not thrown.
+  - Known gaps: no policy for providers who never connect Stripe (money accumulates on the platform),
+    a job on day 7 can finish after its hold lapsed, refunds manual, no saved-card endpoints, and the
+    live Stripe behaviour (Checkout card pre-selection, `transfers`-only Express accounts) is unverified
+    until run with real test keys.
+
 ## Conventions
 
 All naming, controller/service structure, error handling, auth/security rules:
@@ -268,4 +292,5 @@ context only.
 (**seconds, not a duration string** — e.g. `86400`, also used as the session's
 Redis/DB TTL), `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`,
 `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (keys provided
-later, on demand), `STRIPE_SECRET_KEY` (Phase 5), `STRIPE_WEBHOOK_SECRET` (Phase 5).
+later, on demand), `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL` (Phase 5; the last two are where
+Stripe sends users after Checkout / Express onboarding).

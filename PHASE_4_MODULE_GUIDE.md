@@ -120,7 +120,9 @@ How it is enforced:
   `PENDING_PROVIDER` so they re-accept.
 - Cancel is a soft cancel (status flip), so history and the "slot is free again" logic work
   from the same table.
-- `completeBooking` is where **Phase 5** will capture the Stripe payment (marked by a comment).
+- `completeBooking` captures the Stripe payment first (Phase 5, `before` hook), so a Stripe failure leaves
+  the booking `IN_PROGRESS`. Phase 5 also added `PENDING_PAYMENT` (a booking exists but the customer has not
+  paid; providers can't see it) — see `PHASE_5_MODULE_GUIDE.md`.
 
 Listing: `listBookings` returns the caller's bookings **without** `IN_PROGRESS` ones (a
 `Not(IN_PROGRESS)` status filter) unless the caller passes an explicit `?status=`;
@@ -178,7 +180,7 @@ it, so Phase 7 only has to replace the body with FCM — no caller changes.
   `PENDING_PROVIDER`; `listBookings` and the admin path of `getBooking` have no unit tests
   (covered by the live pass only).
 - A declined booking is final: the customer has to plan again (no auto-rematch).
-- No payment yet (Phase 5) and no real push notifications yet (Phase 7).
+- Payments arrived in Phase 5 (`PHASE_5_MODULE_GUIDE.md`); still no real push notifications (Phase 7).
 
 ## 10. Tests and how it was verified
 

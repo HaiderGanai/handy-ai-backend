@@ -14,7 +14,8 @@ Conventions
 - Errors have one shape (global exception filter):
   `{ "statusCode", "error", "message", "path", "timestamp" }`. Validation errors have
   `message` as an array of strings.
-- Dates are ISO-8601 strings (`"2030-01-07T10:00:00.000Z"`). Prices are **cents** (USD).
+- Dates are ISO-8601 strings (`"2030-01-07T10:00:00.000Z"`). Prices are **cents** (USD). Since Phase 5, `scheduledAt` must be **within 7 days** of now (card-hold
+  window); the example dates below only show the format.
 
 ## Before you can book — setup checklist
 
@@ -60,8 +61,9 @@ Body
 
 ### 2. POST `{{baseUrl}}/bookings`
 Role: `CUSTOMER`. Confirms a plan. The server re-checks eligibility and takes price and
-duration from the catalog — whatever the client sends for those is ignored. Status starts as
-`PENDING_PROVIDER`; the provider is notified.
+duration from the catalog — whatever the client sends for those is ignored. **Since Phase 5** the status
+starts as `PENDING_PAYMENT` and the response includes a Stripe `checkoutUrl`; the provider is notified (and
+the booking becomes `PENDING_PROVIDER`) only after the customer pays — see `PHASE_5_API.md`.
 
 Body
 ```json
@@ -75,8 +77,9 @@ Body
 
 | Status | Body |
 |---|---|
-| **201** | the booking: `{ "id", "userId", "providerId", "subServiceId", "scheduledAt", "durationMinutes", "priceCents", "status": "PENDING_PROVIDER", "notes", "createdAt", "updatedAt" }` |
-| 400 | no postcode, time in the past, bad body |
+| **201** | `{ "booking": { "id", "userId", "providerId", "subServiceId", "scheduledAt", "durationMinutes", "priceCents", "status": "PENDING_PAYMENT", "notes", "createdAt", "updatedAt" }, "checkoutUrl": "https://checkout.stripe.com/…" }` |
+| 400 | no postcode, time in the past, **more than 7 days ahead**, bad body |
+| 502 | Stripe unavailable (nothing is saved) |
 | 404 | provider or sub-service not found |
 | 409 | `"Provider is not available for that time!"` (not eligible, or slot taken) |
 
@@ -131,7 +134,7 @@ Body (both fields optional)
 
 ### 6. DELETE `{{baseUrl}}/bookings/{{bookingId}}`
 Role: `CUSTOMER` (owner). Soft cancel → `status: "CANCELLED"` (the row stays). Only from
-`PENDING_PROVIDER` / `CONFIRMED`; **409** once started, completed, declined or cancelled.
+`PENDING_PAYMENT` / `PENDING_PROVIDER` / `CONFIRMED` (a paid booking's card hold is released); **409** once started, completed, declined or cancelled.
 **200** the booking.
 
 ### 7. POST `{{baseUrl}}/user/trusted-providers/{{providerId}}`
@@ -165,7 +168,7 @@ reassigning) changed the booking a moment earlier, the call fails with **409**
 | POST `{{baseUrl}}/bookings/{{bookingId}}/start` | `CONFIRMED` → `IN_PROGRESS` |
 | POST `{{baseUrl}}/bookings/{{bookingId}}/complete` | `IN_PROGRESS` → `COMPLETED` |
 
-`complete` is where Phase 5 will capture the held payment.
+`complete` captures the held payment (Phase 5) and pays the provider 80%; `decline` releases the hold.
 
 ---
 
@@ -199,6 +202,8 @@ Body
  POST /bookings
       │
       ▼
+PENDING_PAYMENT ──(customer pays: Stripe webhook)──┐   (cancel / 30 min unpaid ──▶ CANCELLED)
+                                                    ▼
 PENDING_PROVIDER ──decline──▶ DECLINED
    │   ▲     │
 accept │     └── cancel ──▶ CANCELLED
@@ -212,7 +217,7 @@ IN_PROGRESS ──complete──▶ COMPLETED ──▶ customer can mark provid
 ```
 
 ## Recommended run order
-Customer: set postcode → Plan → Create → *(provider)* Accept → Start *(booking moves to
+Customer: set postcode → Plan → Create → **pay on the `checkoutUrl`** → *(provider)* Accept → Start *(booking moves to
 `GET /bookings/in-progress`)* → Complete *(back into `GET /bookings`)* → *(customer)*
 Mark trusted → Plan again (see `isTrustedProvider: true`). Then try Edit / Cancel on a second
 booking, and Admin List / Reassign.

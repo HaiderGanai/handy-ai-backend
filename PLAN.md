@@ -176,26 +176,18 @@ booking action is taken."
 
 ---
 
-## Phase 5 — Payments (Stripe Connect)
+## Phase 5 — Payments (Stripe) ✅ DONE
 
-Covers spec §6.
+Covers spec §6. Design: `docs/superpowers/specs/2026-10-29-phase-5-payments-design.md`; plan:
+`docs/superpowers/plans/2026-10-29-phase-5-payments.md`; docs `PHASE_5_API.md`, `PHASE_5_MODULE_GUIDE.md`.
 
-**Entities**
-- `Transaction`: `id`, `bookingId`, `stripePaymentIntentId`, `amount`, `commissionAmount` (20%), `providerPayoutAmount`, `status` enum (`HELD | RELEASED | REFUNDED`).
-
-**Stripe flow** (destination charges, manual capture — matches "charged at booking
-confirmation, held until job complete, 20% commission via Connect"):
-- Provider onboarding (Phase 3) gains a step: `POST /provider/profile/stripe-account` creates a Stripe Express account + returns an onboarding link.
-- Customer `POST /user/payment-method` creates a Stripe Customer + SetupIntent for saving a card during onboarding (spec §4.1).
-- `POST /bookings/:id/checkout` — on plan confirmation, creates a Checkout Session (or PaymentIntent directly if no saved card UI needed server-side) with `capture_method: 'manual'`, `transfer_data.destination = provider.stripeAccountId`, `application_fee_amount` = 20% of amount.
-- `POST /webhooks/stripe` — handles `checkout.session.completed` → marks `Transaction` `HELD`, `Booking` `CONFIRMED`.
-- `bookings/:id/complete` (Phase 4) now also captures the PaymentIntent → Stripe auto-transfers the split → `Transaction` → `RELEASED`.
-- `GET /user/receipts`, `GET /provider/earnings` (completed jobs, pending payouts, total earned — spec §5 Earnings Dashboard).
-- Admin: `GET /admin/transactions` (status, amount, commission, payout per spec §7).
-
-Refunds stay manual via the Stripe dashboard per spec — no refund endpoint (matches explicit out-of-scope).
-
-**Done when:** a booking can be paid, held, and released with the correct 80/20 split, visible to user/provider/admin.
+**As built** (differs from the original sketch: separate charges and transfers, not destination
+charges, so a provider can skip Stripe and be paid later):
+- `POST /bookings` creates the booking as `PENDING_PAYMENT` + a Stripe Checkout Session (manual capture) and returns `{ booking, checkoutUrl }`; `POST /bookings/:id/checkout` re-issues the link.
+- `POST /webhooks/stripe` (signature-verified): `checkout.session.completed` → `Transaction` `HELD` (80/20 stored), booking → `PENDING_PROVIDER`; `checkout.session.expired` → `CANCELLED`; `account.updated` → provider onboarded + waiting payouts sent.
+- `complete` captures the PaymentIntent, then Transfers 80% to the provider's Express account (or leaves it `CAPTURED` until they connect); `decline`/cancel release the hold.
+- `POST /provider/stripe-account` (optional, any time), `GET /provider/earnings`, `GET /user/receipts`, `GET /admin/transactions`.
+- Bookings must be within 7 days (card-hold window). Refunds stay manual in the Stripe dashboard.
 
 ---
 

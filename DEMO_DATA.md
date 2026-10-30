@@ -41,6 +41,21 @@ postcodes, because plan matching is an exact postcode match.
 Trusted-provider links: Olivia -> Marcus, Liam -> Daniel, Noah -> Tom, Ava -> Sofia (planning a
 job for those customers prefers that provider).
 
+## Payments (Phase 5)
+
+Every demo booking also has a payment record with **fake Stripe ids** (`pi_demo_N`, `ch_demo_N`,
+`tr_demo_N`), so receipts, earnings and the admin transaction list have data:
+
+| Booking status | Payment record |
+|---|---|
+| `COMPLETED` | `RELEASED` (provider paid) - except Grace's, which are `CAPTURED` (awaiting payout) |
+| `PENDING_PROVIDER`, `CONFIRMED`, `IN_PROGRESS` | `HELD` |
+| `DECLINED`, `CANCELLED` | `CANCELLED` |
+
+Five providers have a fake connected Stripe account (`acct_demo_<name>`); **Grace** has none, to show
+the "connect Stripe" / awaiting-payout state. Real Stripe calls on these bookings (e.g. completing an
+`IN_PROGRESS` one) would fail because the ids don't exist at Stripe - use them to browse, not to pay.
+
 ## Commands
 
 ```bash

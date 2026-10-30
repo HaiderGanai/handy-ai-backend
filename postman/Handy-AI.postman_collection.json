@@ -54,6 +54,16 @@
       "key": "bookingId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "scheduledAt",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "checkoutUrl",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -1365,7 +1375,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"subServiceId\": \"{{subServiceId}}\",\n  \"scheduledAt\": \"2030-01-07T10:00:00.000Z\",\n  \"notes\": \"Please bring ladders\"\n}",
+              "raw": "{\n  \"subServiceId\": \"{{subServiceId}}\",\n  \"scheduledAt\": \"{{scheduledAt}}\",\n  \"notes\": \"Please bring ladders\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1405,14 +1415,27 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"subServiceId\": \"{{subServiceId}}\",\n  \"scheduledAt\": \"2030-01-07T10:00:00.000Z\",\n  \"notes\": \"Please bring ladders\",\n  \"providerId\": \"{{providerId}}\"\n}",
+              "raw": "{\n  \"subServiceId\": \"{{subServiceId}}\",\n  \"scheduledAt\": \"{{scheduledAt}}\",\n  \"notes\": \"Please bring ladders\",\n  \"providerId\": \"{{providerId}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "description": "Returns { booking (status PENDING_PAYMENT), checkoutUrl }. Open checkoutUrl and pay with test card 4242 4242 4242 4242; the Stripe webhook then moves the booking to PENDING_PROVIDER. scheduledAt must be within 7 days and inside the provider's weekly availability (UTC) - set the scheduledAt collection variable first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.booking) { pm.collectionVariables.set('bookingId', r.booking.id); pm.collectionVariables.set('checkoutUrl', r.checkoutUrl); }"
+                ]
+              }
             }
-          }
+          ]
         },
         {
           "name": "List Bookings (customer or provider)",
@@ -1733,6 +1756,195 @@
                 }
               ]
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Checkout Link (booking awaiting payment)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}",
+                "checkout"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Customer. Fresh Stripe Checkout link while the booking is PENDING_PAYMENT; 409 otherwise."
+          }
+        },
+        {
+          "name": "Connect Stripe Account (provider)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/provider/stripe-account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "provider",
+                "stripe-account"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{providerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Provider. Optional, any time. Returns { onboardingUrl }. Open it to finish Stripe Express onboarding; waiting payouts are sent automatically afterwards."
+          }
+        },
+        {
+          "name": "Provider Earnings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/provider/earnings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "provider",
+                "earnings"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{providerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Provider. { releasedCents, awaitingPayoutCents, heldCents, stripeConnected, jobs[] }."
+          }
+        },
+        {
+          "name": "Customer Receipts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/user/receipts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "user",
+                "receipts"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Customer. Paid (captured) bookings."
+          }
+        },
+        {
+          "name": "Admin Transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Admin. Optional ?status=HELD|CAPTURED|RELEASED|CANCELLED."
+          }
+        },
+        {
+          "name": "Stripe Webhook (Stripe calls this, not you)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "stripe-signature",
+                "value": "t=...,v1=..."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/stripe",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "stripe"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"type\": \"checkout.session.completed\" }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Needs a valid stripe-signature header, so use `stripe listen --forward-to localhost:3000/api/v1/webhooks/stripe` to test locally. Without a valid signature: 400."
           }
         }
       ]

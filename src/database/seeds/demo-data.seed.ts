@@ -10,6 +10,9 @@ import { BookingStatus } from '../../booking/enums/booking-status.enum';
 import { ACTIVE_BOOKING_STATUSES } from '../../booking/enums/booking-status.enum';
 import { coversPostcode, overlaps } from '../../booking/eligibility';
 import { ProviderDocument } from '../../provider/entities/provider-document.entity';
+import { Transaction } from '../../payments/entities/transaction.entity';
+import { TransactionStatus } from '../../payments/enums/transaction-status.enum';
+import { splitAmount } from '../../payments/money';
 import { Provider } from '../../provider/entities/provider.entity';
 import { DocumentStatus } from '../../provider/enums/document-status.enum';
 import { DocumentType } from '../../provider/enums/document-type.enum';
@@ -23,6 +26,9 @@ import { Role } from '../../user/enums/role.enum';
 //   npm run seed:demo:remove   remove it
 const DEMO_DOMAIN = '@handyai-demo.dev';
 const PASSWORD = 'Demo@1234';
+
+// the one demo provider who skipped Stripe: her completed jobs show as "awaiting payout"
+const UNCONNECTED = 'grace';
 
 const C = ServiceCategoryName;
 const POSTCODES = ['SW1A 1AA', 'SW3 4HN', 'E1 6AN', 'N1 9GU', 'W1D 3QU'];
@@ -416,6 +422,8 @@ async function seed(dataSource: DataSource): Promise<void> {
           bio: p.bio,
           postcodeCoverage: p.coverage,
           status: ProviderStatus.APPROVED,
+          stripeAccountId: p.key === UNCONNECTED ? null : `acct_demo_${p.key}`,
+          stripeOnboarded: p.key !== UNCONNECTED,
           categories: p.cats.map((name) => categoryByName.get(name)!),
           // Mon-Sat 08:00-20:00 (UTC)
           availability: [1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
@@ -481,20 +489,50 @@ async function seed(dataSource: DataSource): Promise<void> {
       const createdAt = new Date(
         Math.min(now, scheduledAt.getTime() - 3 * 24 * 3600_000),
       );
-      placed.push(
-        await manager.save(
-          manager.create(Booking, {
-            userId: users.get(spec.customer)!.id,
-            providerId: provider.id,
-            subServiceId: sub.id,
-            scheduledAt,
-            durationMinutes: sub.baseDurationMinutes,
-            priceCents: sub.basePriceCents,
-            status: spec.status,
-            notes: spec.notes ?? null,
-            createdAt,
-          }),
-        ),
+      const booking = await manager.save(
+        manager.create(Booking, {
+          userId: users.get(spec.customer)!.id,
+          providerId: provider.id,
+          subServiceId: sub.id,
+          scheduledAt,
+          durationMinutes: sub.baseDurationMinutes,
+          priceCents: sub.basePriceCents,
+          status: spec.status,
+          notes: spec.notes ?? null,
+          createdAt,
+        }),
+      );
+      placed.push(booking);
+
+      // payment record (fake Stripe ids): paid bookings hold the card, finished ones are captured
+      const n = placed.length;
+      const { commissionCents, providerPayoutCents } = splitAmount(
+        booking.priceCents,
+      );
+      const txStatus =
+        spec.status === S.COMPLETED
+          ? provider.stripeOnboarded
+            ? TransactionStatus.RELEASED
+            : TransactionStatus.CAPTURED
+          : spec.status === S.DECLINED || spec.status === S.CANCELLED
+            ? TransactionStatus.CANCELLED
+            : TransactionStatus.HELD; // PENDING_PROVIDER, CONFIRMED, IN_PROGRESS
+      const captured =
+        txStatus === TransactionStatus.RELEASED ||
+        txStatus === TransactionStatus.CAPTURED;
+      await manager.save(
+        manager.create(Transaction, {
+          bookingId: booking.id,
+          stripeCheckoutSessionId: `cs_demo_${n}`,
+          stripePaymentIntentId: `pi_demo_${n}`,
+          stripeChargeId: captured ? `ch_demo_${n}` : null,
+          amountCents: booking.priceCents,
+          commissionCents,
+          providerPayoutCents,
+          status: txStatus,
+          stripeTransferId:
+            txStatus === TransactionStatus.RELEASED ? `tr_demo_${n}` : null,
+        }),
       );
     }
 
@@ -535,6 +573,7 @@ async function main(): Promise<void> {
     console.log(
       `Seeded: ${CUSTOMERS.length} customers, ${PROVIDERS.length} providers, ` +
         `${await count('bookings', `"userId" IN (SELECT id FROM users WHERE email LIKE '%${DEMO_DOMAIN}')`)} bookings, ` +
+        `${await count('transactions', `"bookingId" IN (SELECT id FROM bookings WHERE "userId" IN (SELECT id FROM users WHERE email LIKE '%${DEMO_DOMAIN}'))`)} payment records, ` +
         `${TRUSTED.length} trusted-provider links.`,
     );
     console.log(`Password for every demo account: ${PASSWORD}`);
