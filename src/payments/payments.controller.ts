@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -34,5 +43,11 @@ export class PaymentsController {
   @Roles(Role.ADMIN)
   async listTransactions(@Query() query: ListTransactionsQueryDto) {
     return this.paymentsService.listTransactions(query);
+  }
+
+  @Post('/admin/transactions/:id/payout')
+  @Roles(Role.ADMIN)
+  async retryPayout(@Param('id', ParseUUIDPipe) id: string) {
+    return this.paymentsService.retryPayout(id);
   }
 }

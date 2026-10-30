@@ -105,7 +105,10 @@ describe('StripeWebhookService', () => {
     });
 
     it('on redelivery makes no second transaction and no second notification', async () => {
-      txRepo.findOne.mockResolvedValue({ id: 't1' });
+      txRepo.findOne.mockResolvedValue({
+        id: 't1',
+        stripePaymentIntentId: 'pi_1',
+      });
       bookingRepo.findOne.mockResolvedValue({
         ...pendingBooking,
         status: BookingStatus.PENDING_PROVIDER,
@@ -133,6 +136,16 @@ describe('StripeWebhookService', () => {
       expect(payments.cancelUnclaimedHold).toHaveBeenCalledWith('pi_1');
     });
 
+    it('cancels a second PaymentIntent paid for the same booking (two tabs)', async () => {
+      txRepo.findOne.mockResolvedValue({
+        id: 't1',
+        stripePaymentIntentId: 'pi_first',
+      });
+      await send(event('checkout.session.completed', session));
+      expect(payments.cancelUnclaimedHold).toHaveBeenCalledWith('pi_1');
+      expect(bookingRepo.update).not.toHaveBeenCalled();
+    });
+
     it('ignores sessions that are not ours (no booking reference)', async () => {
       await send(
         event('checkout.session.completed', {
@@ -156,6 +169,15 @@ describe('StripeWebhookService', () => {
         'BOOKING_PAYMENT_EXPIRED',
         { bookingId: 'b1' },
       );
+    });
+
+    it('ignores the expiry of an older session when a newer checkout link is current', async () => {
+      bookingRepo.findOne.mockResolvedValue({
+        ...pendingBooking,
+        checkoutSessionId: 'cs_current',
+      });
+      await send(event('checkout.session.expired', session)); // cs_1 is not current
+      expect(bookingRepo.update).not.toHaveBeenCalled();
     });
 
     it('leaves a booking that is no longer waiting for payment alone', async () => {
@@ -185,6 +207,20 @@ describe('StripeWebhookService', () => {
         stripeOnboarded: true,
       });
       expect(payments.payoutWaiting).toHaveBeenCalledWith('p1');
+    });
+
+    it('switches a provider back to not-onboarded when Stripe restricts the account', async () => {
+      providerRepo.findOne.mockResolvedValue({
+        id: 'p1',
+        stripeOnboarded: true,
+      });
+      await send(
+        event('account.updated', { ...ready, payouts_enabled: false }),
+      );
+      expect(providerRepo.update).toHaveBeenCalledWith('p1', {
+        stripeOnboarded: false,
+      });
+      expect(payments.payoutWaiting).not.toHaveBeenCalled();
     });
 
     it('does not pay out while the account is not ready', async () => {

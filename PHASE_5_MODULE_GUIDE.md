@@ -58,7 +58,7 @@ Every test mocks `StripeService`; nothing in the suite calls Stripe.
 - `users.stripeCustomerId` (hidden from API output with `@Exclude`) — created on the first
   checkout and reused, which is how saved cards come back.
 - `providers.stripeOnboarded` — set from the `account.updated` webhook.
-- `bookings.status` gains `PENDING_PAYMENT`, which is part of `ACTIVE_BOOKING_STATUSES` so the
+- `bookings.checkoutSessionId` (migration `Phase5CheckoutSession`) tracks the one Checkout Session that counts. `bookings.status` gains `PENDING_PAYMENT`, which is part of `ACTIVE_BOOKING_STATUSES` so the
   slot is held while the customer pays.
 
 ## 5. How `BookingService` hooks in
@@ -100,11 +100,14 @@ Stripe redelivers events, so each handler checks state first:
 | Transfer fails after a good capture | logged; booking completes; transaction stays `CAPTURED`; retried on the next `account.updated`. Idempotency key `payout-<transactionId>` prevents a double payout |
 | Releasing a hold fails | logged, booking change stands, transaction stays `HELD` (visible to admins); the hold lapses on its own within 7 days |
 | Booking created before Phase 5 | no transaction → `complete` skips capture |
+| Card hold already lapsed at `complete` | capture fails, Stripe says the PaymentIntent is `canceled` → transaction `CANCELLED`, the booking completes, an error is logged for an admin (the provider is unpaid) |
+| Customer opens a second Checkout link | `bookings.checkoutSessionId` holds the current one; the old session is expired, its `expired` event is ignored, and a second payment's hold is cancelled |
+| Payout failed for an already-connected provider | admin `POST /admin/transactions/:id/payout`; `account.updated` also retries, and flips `stripeOnboarded` back to false if Stripe restricts the account |
 
 ## 8. Gotchas
 
 - **7-day hold window:** an authorisation expires after 7 days, hence the 7-day booking horizon
-  (`assertWithinHorizon`, applied to plan, create and time edits). A job on the very last day can
+  (`assertWithinHorizon`, applied to plan, create and time edits; an edit is measured from the booking's creation, because the hold started then). A job on the very last day can
   finish after the hold lapsed — shrink the horizon if that matters.
 - **`source_transaction`:** the payout Transfer is tied to the captured charge so it works before
   the captured funds are in the platform's available balance (hence `stripeChargeId`).

@@ -63,6 +63,11 @@ export class StripeWebhookService {
     const existing = await this.transactionRepository.findOne({
       where: { bookingId },
     });
+    // the customer paid a second checkout link for the same booking: refund that hold
+    if (existing && existing.stripePaymentIntentId !== paymentIntentId) {
+      await this.paymentsService.cancelUnclaimedHold(paymentIntentId);
+      return;
+    }
     if (!existing) {
       // paid for a booking that was cancelled/expired meanwhile: give the hold back
       if (!booking || booking.status !== BookingStatus.PENDING_PAYMENT) {
@@ -109,7 +114,11 @@ export class StripeWebhookService {
     const booking = await this.bookingRepository.findOne({
       where: { id: bookingId },
     });
-    if (booking?.status !== BookingStatus.PENDING_PAYMENT) {
+    // an older link expiring must not cancel a booking that has a newer one open
+    if (
+      booking?.status !== BookingStatus.PENDING_PAYMENT ||
+      (booking.checkoutSessionId && booking.checkoutSessionId !== session.id)
+    ) {
       return;
     }
     const { affected } = await this.bookingRepository.update(
@@ -129,13 +138,18 @@ export class StripeWebhookService {
     const provider = await this.providerRepository.findOne({
       where: { stripeAccountId: account.id },
     });
-    if (!provider || !isPayoutReady(account)) {
+    if (!provider) {
       return;
     }
-    if (!provider.stripeOnboarded) {
+    const ready = isPayoutReady(account);
+    // follows Stripe both ways: a restricted account stops receiving transfers
+    if (provider.stripeOnboarded !== ready) {
       await this.providerRepository.update(provider.id, {
-        stripeOnboarded: true,
+        stripeOnboarded: ready,
       });
+    }
+    if (!ready) {
+      return;
     }
     // also retries payouts that failed earlier
     await this.paymentsService.payoutWaiting(provider.id);

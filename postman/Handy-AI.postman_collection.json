@@ -64,6 +64,11 @@
       "key": "checkoutUrl",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "transactionId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -1909,6 +1914,36 @@
               ]
             },
             "description": "Admin. Optional ?status=HELD|CAPTURED|RELEASED|CANCELLED."
+          }
+        },
+        {
+          "name": "Admin Retry Payout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/transactions/{{transactionId}}/payout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "transactions",
+                "{{transactionId}}",
+                "payout"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Admin. Retries the 80% transfer for a CAPTURED transaction."
           }
         },
         {

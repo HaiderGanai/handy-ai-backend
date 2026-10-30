@@ -270,9 +270,19 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
     Transfers use `source_transaction` (stored `stripeChargeId`) and idempotency key `payout-<txId>`.
   - `StripeService` is the only file touching the SDK (`stripe` 23.x, CommonJS build works under Jest);
     `rawBody: true` in `main.ts` for signature checks. New `transactions` table, `users.stripeCustomerId`
-    (`@Exclude`), `providers.stripeOnboarded`; migration `Phase5Payments1793900000000` ran **locally only**
-    - apply it on the server DB (and set the `STRIPE_*` env on the droplet) before deploying.
+    (`@Exclude`), `providers.stripeOnboarded`, `bookings.checkoutSessionId`; migrations
+    `Phase5Payments1793900000000` + `Phase5CheckoutSession1793900000001` ran **locally only**
+    - apply them on the server DB (and set the `STRIPE_*` env on the droplet) before deploying.
   - Demo seed now also creates fake-Stripe-id `Transaction` rows (Grace has no Stripe account).
+  - Final review (Opus) fixes: only the newest Checkout link counts (`checkoutSessionId`, old one
+    expired, stale `expired` events ignored, a second payment's hold cancelled); time edits measure the
+    7 days from booking creation; a lapsed hold at `complete` cancels the transaction instead of
+    502-ing forever; `account.updated` flips `stripeOnboarded` both ways; admin
+    `POST /admin/transactions/:id/payout` retries stuck payouts.
+  - Deferred minors: cancel-vs-payment race can leave a stray hold; capture-succeeded-but-DB-write-failed
+    retry (adopt the charge); payment landing after `scheduledAt`; two concurrent first checkouts can
+    create two Stripe customers; no guard/metadata tests for the new routes; nested-where queries only
+    tested against mocks (never run on a real DB with data).
   - Cancelling an unpaid booking does not expire its Checkout page; a late payment is caught by the
     webhook (cancels that PaymentIntent). Hold-release failures are logged, not thrown.
   - Known gaps: no policy for providers who never connect Stripe (money accumulates on the platform),

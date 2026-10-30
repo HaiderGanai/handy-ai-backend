@@ -56,4 +56,12 @@ describe('assertWithinHorizon', () => {
   it('rejects a time more than 7 days away with 400', () => {
     expect(() => assertWithinHorizon(inDays(8))).toThrow(BadRequestException);
   });
+
+  it('can measure the 7 days from an earlier moment (when the card hold started)', () => {
+    const fiveDaysAgo = inDays(-5);
+    expect(() => assertWithinHorizon(inDays(8), fiveDaysAgo)).toThrow(
+      BadRequestException,
+    );
+    expect(() => assertWithinHorizon(inDays(1), fiveDaysAgo)).not.toThrow();
+  });
 });

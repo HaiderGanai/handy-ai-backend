@@ -294,6 +294,19 @@ describe('BookingService', () => {
       expect(bookingRepo.save).not.toHaveBeenCalled();
     });
 
+    it('updateBooking measures the 7 days from when the booking was paid, not from now', async () => {
+      // paid 5 days ago: its card hold dies in 2 days, so day +4 from now is too late
+      bookingRepo.findOne.mockResolvedValue(
+        makeBooking({ createdAt: new Date('2998-12-25T00:00:00Z') }),
+      );
+      await expect(
+        service.updateBooking('c1', 'b1', {
+          scheduledAt: new Date('2999-01-03T10:00:00Z'),
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(bookingRepo.update).not.toHaveBeenCalled();
+    });
+
     it('updateBooking rejects moving a booking more than 7 days ahead', async () => {
       bookingRepo.findOne.mockResolvedValue(makeBooking());
       await expect(

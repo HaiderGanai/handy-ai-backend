@@ -48,7 +48,7 @@ Customer                      API                           Stripe              
 
 ## Rules to know
 
-- **`scheduledAt` must be within 7 days** of now (card holds expire after 7 days) — applies to
+- **`scheduledAt` must be within 7 days** of now (a time **edit** is measured from when the booking was made, because that is when the card hold started) (card holds expire after 7 days) — applies to
   plan, create and time edits: `400 "Bookings can be made up to 7 days ahead!"`. It must also be
   inside the provider's weekly availability window (UTC) as before.
 - Providers can **skip Stripe at onboarding**. Jobs still run; their 80% waits and is sent
@@ -75,7 +75,8 @@ The provider is **not** notified yet — that happens when the payment is confir
 
 ### 2. POST `{{baseUrl}}/bookings/{{bookingId}}/checkout`
 Role `CUSTOMER` (owner). No body. A fresh Checkout link for a booking still waiting for payment
-(lost the link, or the page was closed).
+(lost the link, or the page was closed). Only the newest link counts: the previous one is expired, and
+if both get paid anyway the second payment's hold is released.
 
 | Status | Body |
 |---|---|
@@ -137,7 +138,7 @@ prompt when `stripeConnected` is `false`.
 
 ### 7. Booking actions (changed behaviour)
 - `POST …/decline` also releases the customer's hold.
-- `POST …/complete` captures the payment **first**; if Stripe fails it returns **502** and the
+- `POST …/complete` captures the payment **first** (if the card hold has already lapsed, the booking still completes, the transaction becomes `CANCELLED` and an admin has to sort out the provider's pay - it is logged); if Stripe fails it returns **502** and the
   booking stays `IN_PROGRESS` (retry). If the capture works but the provider payout fails, the
   booking still completes and the payout is retried later.
 - Bookings created before Phase 5 have no payment and complete without a capture.
@@ -152,11 +153,17 @@ Role `ADMIN`. Optional `?status=HELD|CAPTURED|RELEASED|CANCELLED`. Newest first.
 
 **200** `[ { "id", "bookingId", "status", "amountCents", "commissionCents", "providerPayoutCents", "stripePaymentIntentId", "stripeChargeId", "stripeTransferId", "createdAt", "updatedAt", … } ]`
 
+### 9. POST `{{baseUrl}}/admin/transactions/{{transactionId}}/payout`
+Role `ADMIN`. No body. Retries the 80% transfer for a transaction stuck in `CAPTURED` (e.g. the
+transfer failed while the provider was already connected). **201** the transaction (`RELEASED` if it
+worked, still `CAPTURED` if Stripe failed again or the provider isn't connected) · 404 unknown id ·
+409 `"Transaction is not waiting for payout!"`.
+
 ---
 
 ## Stripe webhook
 
-### 9. POST `{{baseUrl}}/webhooks/stripe`
+### 10. POST `{{baseUrl}}/webhooks/stripe`
 Called by Stripe only. No Bearer token; authenticated by the `stripe-signature` header
 (`400 "Invalid Stripe signature!"` / `"Missing Stripe signature!"` otherwise). Always answers
 **200** `{ "received": true }` for a valid event, handled or not.
@@ -165,7 +172,7 @@ Called by Stripe only. No Bearer token; authenticated by the `stripe-signature` 
 |---|---|
 | `checkout.session.completed` | creates the `HELD` transaction (80/20 split stored), booking → `PENDING_PROVIDER`, provider notified. If the booking was cancelled/expired meanwhile, the hold is cancelled instead. |
 | `checkout.session.expired` | an unpaid booking → `CANCELLED`, slot freed, customer notified |
-| `account.updated` | provider payouts enabled → mark connected, send all waiting payouts |
+| `account.updated` | payouts enabled → mark connected and send all waiting payouts; if Stripe restricts the account the provider goes back to not-connected |
 
 Safe to redeliver: repeats change nothing.
 

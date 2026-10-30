@@ -1,6 +1,12 @@
-import { BadGatewayException, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  ConflictException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Booking } from '../booking/entities/booking.entity';
 import { Provider } from '../provider/entities/provider.entity';
 import { User } from '../user/entities/user.entity';
 import { Transaction } from './entities/transaction.entity';
@@ -13,6 +19,7 @@ describe('PaymentsService', () => {
   const txRepo = { findOne: jest.fn(), find: jest.fn(), update: jest.fn() };
   const providerRepo = { findOne: jest.fn(), update: jest.fn() };
   const userRepo = { findOne: jest.fn(), update: jest.fn() };
+  const bookingRepo = { update: jest.fn() };
   const stripe = {
     createCustomer: jest.fn(),
     createCheckoutSession: jest.fn(),
@@ -21,6 +28,8 @@ describe('PaymentsService', () => {
     createTransfer: jest.fn(),
     createConnectedAccount: jest.fn(),
     createAccountLink: jest.fn(),
+    expireCheckoutSession: jest.fn(),
+    getPaymentIntentStatus: jest.fn(),
   };
 
   const makeTx = (over: object = {}) => ({
@@ -47,12 +56,14 @@ describe('PaymentsService', () => {
     stripe.capturePaymentIntent.mockResolvedValue({ chargeId: 'ch_1' });
     stripe.createTransfer.mockResolvedValue('tr_1');
     stripe.cancelPaymentIntent.mockResolvedValue(undefined);
+    stripe.expireCheckoutSession.mockResolvedValue(undefined);
     const module = await Test.createTestingModule({
       providers: [
         PaymentsService,
         { provide: getRepositoryToken(Transaction), useValue: txRepo },
         { provide: getRepositoryToken(Provider), useValue: providerRepo },
         { provide: getRepositoryToken(User), useValue: userRepo },
+        { provide: getRepositoryToken(Booking), useValue: bookingRepo },
         { provide: StripeService, useValue: stripe },
       ],
     }).compile();
@@ -70,6 +81,7 @@ describe('PaymentsService', () => {
       });
       stripe.createCustomer.mockResolvedValue('cus_1');
       stripe.createCheckoutSession.mockResolvedValue({
+        id: 'cs_new',
         url: 'https://pay.test/s1',
       });
 
@@ -85,6 +97,47 @@ describe('PaymentsService', () => {
         productName: 'Regular home clean',
         bookingId: 'b1',
       });
+    });
+
+    it('remembers the current session on the booking and expires the previous one', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 'c1',
+        email: 'a@b.c',
+        stripeCustomerId: 'cus_old',
+      });
+      stripe.createCheckoutSession.mockResolvedValue({
+        id: 'cs_new',
+        url: 'https://pay.test/s3',
+      });
+      await service.createCheckout(
+        { ...booking, checkoutSessionId: 'cs_prev' },
+        'Clean',
+      );
+      expect(bookingRepo.update).toHaveBeenCalledWith('b1', {
+        checkoutSessionId: 'cs_new',
+      });
+      expect(stripe.expireCheckoutSession).toHaveBeenCalledWith('cs_prev');
+    });
+
+    it('still returns the new link when expiring the previous session fails', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 'c1',
+        email: 'a@b.c',
+        stripeCustomerId: 'cus_old',
+      });
+      stripe.createCheckoutSession.mockResolvedValue({
+        id: 'cs_new',
+        url: 'https://pay.test/s4',
+      });
+      stripe.expireCheckoutSession.mockRejectedValue(
+        new Error('already expired'),
+      );
+      await expect(
+        service.createCheckout(
+          { ...booking, checkoutSessionId: 'cs_prev' },
+          'Clean',
+        ),
+      ).resolves.toBe('https://pay.test/s4');
     });
 
     it('reuses an existing Stripe customer', async () => {
@@ -173,6 +226,29 @@ describe('PaymentsService', () => {
         status: TransactionStatus.RELEASED,
         stripeTransferId: 'tr_1',
       });
+    });
+
+    it('cancels the transaction instead of failing forever when the hold has lapsed', async () => {
+      txRepo.findOne.mockResolvedValue(makeTx());
+      stripe.capturePaymentIntent.mockRejectedValue(
+        new Error('cannot capture'),
+      );
+      stripe.getPaymentIntentStatus.mockResolvedValue('canceled');
+      await expect(service.captureAndPayout(booking)).resolves.toBeUndefined();
+      expect(txRepo.update).toHaveBeenCalledWith('t1', {
+        status: TransactionStatus.CANCELLED,
+      });
+      expect(stripe.createTransfer).not.toHaveBeenCalled();
+    });
+
+    it('still answers 502 when the capture failed but the hold is alive', async () => {
+      txRepo.findOne.mockResolvedValue(makeTx());
+      stripe.capturePaymentIntent.mockRejectedValue(new Error('stripe 500'));
+      stripe.getPaymentIntentStatus.mockResolvedValue('requires_capture');
+      await expect(service.captureAndPayout(booking)).rejects.toThrow(
+        BadGatewayException,
+      );
+      expect(txRepo.update).not.toHaveBeenCalled();
     });
 
     it('captures but keeps the money when the provider has not connected Stripe', async () => {
@@ -392,6 +468,40 @@ describe('PaymentsService', () => {
         where: {},
         order: { createdAt: 'DESC' },
       });
+    });
+  });
+
+  describe('retryPayout', () => {
+    it('pays out a CAPTURED transaction on request', async () => {
+      txRepo.findOne
+        .mockResolvedValueOnce({
+          ...makeTx({
+            status: TransactionStatus.CAPTURED,
+            stripeChargeId: 'ch_1',
+          }),
+          booking: { providerId: 'p1' },
+        })
+        .mockResolvedValueOnce(makeTx({ status: TransactionStatus.RELEASED }));
+      const result = await service.retryPayout('t1');
+      expect(stripe.createTransfer).toHaveBeenCalledWith(
+        expect.objectContaining({ destination: 'acct_1', chargeId: 'ch_1' }),
+      );
+      expect(result.status).toBe(TransactionStatus.RELEASED);
+    });
+
+    it('404 for an unknown transaction', async () => {
+      txRepo.findOne.mockResolvedValue(null);
+      await expect(service.retryPayout('x')).rejects.toThrow(NotFoundException);
+    });
+
+    it('409 when the transaction is not waiting for a payout', async () => {
+      txRepo.findOne.mockResolvedValue({
+        ...makeTx({ status: TransactionStatus.RELEASED }),
+        booking: { providerId: 'p1' },
+      });
+      await expect(service.retryPayout('t1')).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 });

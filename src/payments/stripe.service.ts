@@ -37,7 +37,7 @@ export class StripeService {
     amountCents: number;
     productName: string;
     bookingId: string;
-  }): Promise<{ url: string }> {
+  }): Promise<{ id: string; url: string }> {
     const session = await this.client().checkout.sessions.create({
       mode: 'payment',
       customer: p.customerId,
@@ -66,7 +66,16 @@ export class StripeService {
     if (!session.url) {
       throw new Error('Stripe returned a Checkout Session without a url');
     }
-    return { url: session.url };
+    return { id: session.id, url: session.url };
+  }
+
+  async expireCheckoutSession(id: string): Promise<void> {
+    await this.client().checkout.sessions.expire(id);
+  }
+
+  async getPaymentIntentStatus(id: string): Promise<string> {
+    const intent = await this.client().paymentIntents.retrieve(id);
+    return intent.status;
   }
 
   async cancelPaymentIntent(id: string): Promise<void> {

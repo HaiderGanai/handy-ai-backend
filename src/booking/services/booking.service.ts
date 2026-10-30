@@ -179,7 +179,8 @@ export class BookingService {
       data.scheduledAt.getTime() !== booking.scheduledAt.getTime()
     ) {
       assertInFuture(data.scheduledAt);
-      assertWithinHorizon(data.scheduledAt);
+      // the card hold started when the booking was made, so measure from then
+      assertWithinHorizon(data.scheduledAt, booking.createdAt);
       const subService = await this.bookingPlanService.getSubService(
         booking.subServiceId,
       );

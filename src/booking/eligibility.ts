@@ -62,8 +62,10 @@ export function assertInFuture(date: Date): void {
 // ponytail: a job on the very last day can finish after the hold lapsed; shrink the horizon if that bites
 export const BOOKING_HORIZON_DAYS = 7;
 
-export function assertWithinHorizon(date: Date): void {
-  if (date.getTime() > Date.now() + BOOKING_HORIZON_DAYS * 86_400_000) {
+// `from` is when the card hold started (the booking's creation); defaults to now
+export function assertWithinHorizon(date: Date, from?: Date): void {
+  const start = from?.getTime() ?? Date.now();
+  if (date.getTime() > start + BOOKING_HORIZON_DAYS * 86_400_000) {
     throw new BadRequestException(
       `Bookings can be made up to ${BOOKING_HORIZON_DAYS} days ahead!`,
     );

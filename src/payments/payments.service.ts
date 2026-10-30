@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  ConflictException,
   HttpException,
   Injectable,
   Logger,
@@ -26,11 +27,15 @@ export class PaymentsService {
     private readonly providerRepository: Repository<Provider>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Booking)
+    private readonly bookingRepository: Repository<Booking>,
     private readonly stripeService: StripeService,
   ) {}
 
   async createCheckout(
-    booking: Pick<Booking, 'id' | 'userId' | 'priceCents'>,
+    booking: Pick<Booking, 'id' | 'userId' | 'priceCents'> & {
+      checkoutSessionId?: string | null;
+    },
     productName: string,
   ): Promise<string> {
     const customerId = await this.getStripeCustomerId(booking.userId);
@@ -42,6 +47,23 @@ export class PaymentsService {
         bookingId: booking.id,
       }),
     );
+    // only the newest link counts: remember it and retire the previous one, so its
+    // expiry (or a payment on it) can't be confused with the current checkout
+    await this.bookingRepository.update(booking.id, {
+      checkoutSessionId: session.id,
+    });
+    if (booking.checkoutSessionId) {
+      try {
+        await this.stripeService.expireCheckoutSession(
+          booking.checkoutSessionId,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Could not expire previous checkout session for booking ${booking.id}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
     return session.url;
   }
 
@@ -86,11 +108,27 @@ export class PaymentsService {
       return;
     }
     if (transaction.status === TransactionStatus.HELD) {
-      const { chargeId } = await this.stripeCall(() =>
-        this.stripeService.capturePaymentIntent(
-          transaction.stripePaymentIntentId,
-        ),
-      );
+      let chargeId: string;
+      try {
+        ({ chargeId } = await this.stripeCall(() =>
+          this.stripeService.capturePaymentIntent(
+            transaction.stripePaymentIntentId,
+          ),
+        ));
+      } catch (error) {
+        // a lapsed hold can never be captured: stop failing forever, let the job complete
+        // and leave the unpaid provider to an admin (the log line is the flag)
+        if (await this.isHoldGone(transaction.stripePaymentIntentId)) {
+          this.logger.error(
+            `Card hold for booking ${booking.id} no longer exists; completing without payment`,
+          );
+          await this.transactionRepository.update(transaction.id, {
+            status: TransactionStatus.CANCELLED,
+          });
+          return;
+        }
+        throw error;
+      }
       await this.transactionRepository.update(transaction.id, {
         status: TransactionStatus.CAPTURED,
         stripeChargeId: chargeId,
@@ -101,6 +139,24 @@ export class PaymentsService {
     if (transaction.status === TransactionStatus.CAPTURED) {
       await this.tryPayout(transaction, booking.providerId);
     }
+  }
+
+  // admin retry for a payout that failed while the provider was already connected
+  async retryPayout(transactionId: string): Promise<Transaction> {
+    const transaction = await this.transactionRepository.findOne({
+      where: { id: transactionId },
+      relations: { booking: true },
+    });
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found!');
+    }
+    if (transaction.status !== TransactionStatus.CAPTURED) {
+      throw new ConflictException('Transaction is not waiting for payout!');
+    }
+    await this.tryPayout(transaction, transaction.booking.providerId);
+    return (await this.transactionRepository.findOne({
+      where: { id: transactionId },
+    }))!;
   }
 
   // called when a provider finishes Stripe onboarding: pays everything that was waiting
@@ -213,6 +269,17 @@ export class PaymentsService {
       where: query.status ? { status: query.status } : {},
       order: { createdAt: 'DESC' },
     });
+  }
+
+  private async isHoldGone(paymentIntentId: string): Promise<boolean> {
+    try {
+      return (
+        (await this.stripeService.getPaymentIntentStatus(paymentIntentId)) ===
+        'canceled'
+      );
+    } catch {
+      return false;
+    }
   }
 
   private async tryPayout(

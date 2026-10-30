@@ -58,6 +58,10 @@ export class Booking {
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 
+  // the Stripe Checkout Session the customer is currently meant to pay on
+  @Column({ type: 'varchar', nullable: true })
+  checkoutSessionId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
