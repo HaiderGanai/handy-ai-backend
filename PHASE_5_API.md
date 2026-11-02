@@ -10,6 +10,15 @@ Conventions are the same as `PHASE_4_API.md`: Bearer token on every endpoint exc
 webhook, wrong role = **403**, one error shape `{ statusCode, error, message, path, timestamp }`,
 money is **integer USD cents**.
 
+> ## ⚠️ NEGATIVE BALANCE LIABILITY — THE PLATFORM IS LIABLE
+>
+> **Handy AI has opted into Stripe *negative balance liability* (platform-managed losses).**
+> If a refund, dispute/chargeback or reversal exceeds what a provider's Stripe balance
+> holds, **the platform covers the shortfall, not Stripe and not the provider.**
+> Reason: money is captured on the *platform* account and Transferred (80%) to providers afterwards
+> (separate charges and transfers), so any refund or chargeback after payout lands on the platform
+> first. Anyone changing refunds, disputes or payouts must account for this.
+
 ## How paying works
 
 ```

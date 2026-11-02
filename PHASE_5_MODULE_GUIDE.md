@@ -4,6 +4,15 @@ How the payment module works, why it is shaped this way, and where the sharp edg
 Endpoint bodies/responses: `PHASE_5_API.md`. Design: `docs/superpowers/specs/2026-10-29-phase-5-payments-design.md`,
 plan: `docs/superpowers/plans/2026-10-29-phase-5-payments.md`.
 
+> ## ⚠️ NEGATIVE BALANCE LIABILITY — READ BEFORE TOUCHING REFUNDS/PAYOUTS
+>
+> **Handy AI has opted into Stripe *negative balance liability* (platform-managed losses).**
+> If a refund, dispute/chargeback or reversal exceeds what a provider's Stripe balance
+> holds, **the platform covers the shortfall, not Stripe and not the provider.**
+> Reason: money is captured on the *platform* account and Transferred (80%) to providers afterwards
+> (separate charges and transfers), so any refund or chargeback after payout lands on the platform
+> first. Anyone changing refunds, disputes or payouts must account for this.
+
 ## 1. The big picture
 
 The customer pays when the booking is created, but only an **authorisation** (a hold on the

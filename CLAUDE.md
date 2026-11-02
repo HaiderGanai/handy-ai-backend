@@ -285,9 +285,13 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
     tested against mocks (never run on a real DB with data).
   - Cancelling an unpaid booking does not expire its Checkout page; a late payment is caught by the
     webhook (cancels that PaymentIntent). Hold-release failures are logged, not thrown.
+  - **NEGATIVE BALANCE LIABILITY (Stripe Connect) - the platform bears it.** We requested
+    platform-managed loss liability for connected accounts: chargebacks/refunds that exceed a
+    provider's balance are covered by Handy AI. Refunds are still manual and there is no
+    dispute handling or provider-reserve policy yet, so exposure is unbounded until one exists.
   - Known gaps: no policy for providers who never connect Stripe (money accumulates on the platform),
     a job on day 7 can finish after its hold lapsed, refunds manual, no saved-card endpoints, and the
-    live Stripe behaviour (Checkout card pre-selection, `transfers`-only Express accounts) is unverified
+    live Stripe behaviour (Checkout card pre-selection, Express accounts with `card_payments`+`transfers` and platform-managed losses (`controller`)) is unverified
     until run with real test keys.
 
 ## Conventions

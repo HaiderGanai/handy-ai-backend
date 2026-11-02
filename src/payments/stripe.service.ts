@@ -120,10 +120,19 @@ export class StripeService {
     providerId: string,
   ): Promise<string> {
     const account = await this.client().accounts.create({
-      type: 'express',
+      // controller (not `type: 'express'`) is what makes the platform liable for negative balances
+      controller: {
+        losses: { payments: 'application' },
+        fees: { payer: 'application' },
+        requirement_collection: 'stripe',
+        stripe_dashboard: { type: 'express' },
+      },
       country: 'US',
       email,
-      capabilities: { transfers: { requested: true } },
+      capabilities: {
+        card_payments: { requested: true }, // US accounts can't have transfers without it
+        transfers: { requested: true },
+      },
       metadata: { providerId },
     });
     return account.id;
