@@ -5,6 +5,7 @@ import { SubService } from '../../catalog/entities/sub-service.entity';
 import { ServiceCategory } from '../../catalog/entities/service-category.entity';
 import { ServiceCategoryName } from '../../catalog/enums/service-category-name.enum';
 import { Booking } from '../../booking/entities/booking.entity';
+import { Message } from '../../messaging/entities/message.entity';
 import { TrustedProvider } from '../../booking/entities/trusted-provider.entity';
 import { BookingStatus } from '../../booking/enums/booking-status.enum';
 import { ACTIVE_BOOKING_STATUSES } from '../../booking/enums/booking-status.enum';
@@ -534,6 +535,29 @@ async function seed(dataSource: DataSource): Promise<void> {
             txStatus === TransactionStatus.RELEASED ? `tr_demo_${n}` : null,
         }),
       );
+
+      // a short chat on live and finished jobs (deleted with the demo users via the FK cascade)
+      if (
+        spec.status === S.CONFIRMED ||
+        spec.status === S.IN_PROGRESS ||
+        spec.status === S.COMPLETED
+      ) {
+        const first = new Date(createdAt.getTime() + 3600_000);
+        await manager.save([
+          manager.create(Message, {
+            bookingId: booking.id,
+            senderId: booking.userId,
+            body: 'Hi! Is there anything I should prepare before you arrive?',
+            createdAt: first,
+          }),
+          manager.create(Message, {
+            bookingId: booking.id,
+            senderId: provider.userId,
+            body: 'Hello, just make sure I can get to the work area. See you then!',
+            createdAt: new Date(first.getTime() + 600_000),
+          }),
+        ]);
+      }
     }
 
     await manager.save(

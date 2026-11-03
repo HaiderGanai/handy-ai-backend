@@ -69,6 +69,11 @@
       "key": "transactionId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "messageId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -1980,6 +1985,165 @@
               }
             },
             "description": "Needs a valid stripe-signature header, so use `stripe listen --forward-to localhost:3000/api/v1/webhooks/stripe` to test locally. Without a valid signature: 400."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Messaging",
+      "item": [
+        {
+          "name": "Send Message (customer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}",
+                "messages"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Customer of the booking. 1-1000 chars. 409 once the booking is declined/cancelled/completed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Hi, is there anything I should prepare?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Send Message (provider)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}",
+                "messages"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{providerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Assigned provider. 404 while the booking is PENDING_PAYMENT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Just make sure I can reach the work area.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List Messages (latest 50)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}",
+                "messages"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Oldest first. Readable in every booking status."
+          }
+        },
+        {
+          "name": "List Messages (poll after id)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/messages?after={{messageId}}&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "after",
+                  "value": "{{messageId}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{providerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Only messages newer than the given message id. 400 if the id is not from this booking."
           }
         }
       ]

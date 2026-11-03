@@ -58,7 +58,7 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
 | 3 | Providers & vetting (onboarding, documents, admin approve/reject) | Done |
 | 4 | Bookings (plan → confirm → accept/decline → start → complete, trusted providers) | Done |
 | 5 | Payments (Stripe, hold/capture, 80/20 split) | Done |
-| 6 | In-app messaging (per booking, user↔provider) | Not started |
+| 6 | In-app messaging (per booking, user↔provider) | Done |
 | 7 | Notifications (FCM-ready interface, no-op impl for now) & contact support | Not started |
 | 8 | Admin platform stats | Not started |
 
@@ -293,6 +293,19 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
     a job on day 7 can finish after its hold lapsed, refunds manual, no saved-card endpoints, and the
     live Stripe behaviour (Checkout card pre-selection, Express accounts with `card_payments`+`transfers` and platform-managed losses (`controller`)) is unverified
     until run with real test keys.
+
+- 2026-11-03 - Phase 6 complete (in-app messaging). Writeups: `PHASE_6_MODULE_GUIDE.md`, `PHASE_6_API.md`;
+  Postman "Messaging" folder; spec/plan in `docs/superpowers/specs|plans/2026-11-03-phase-6-messaging*`.
+  - `POST` / `GET /bookings/:id/messages`, new `src/messaging/` module, `messages` table (migration
+    `Phase6Messages1793900000002`, ran **locally only** - apply on the server DB before deploying).
+  - One thread per booking (no conversation entity). Only the booking's customer and assigned provider;
+    everyone else (admins too) and providers on `PENDING_PAYMENT` bookings get 404. Reading works in any
+    status; writing only in `PENDING_PROVIDER`/`CONFIRMED`/`IN_PROGRESS` (409 otherwise). Responses carry
+    `sender: CUSTOMER|PROVIDER`, never email/phone. Polling via `?after=<messageId>&limit=` (default 50, max 100).
+  - These rules were my calls from `PLAN.md` (no discussion round) - change them if product disagrees.
+  - Known gaps: message text isn't scanned for contact details; no rate limiting, unread counts or push (log-only
+    `notify` until Phase 7); createdAt cursor can skip two same-microsecond messages; admins can't read threads.
+  - `seed:demo` adds a short chat to every CONFIRMED/IN_PROGRESS/COMPLETED demo booking.
 
 ## Conventions
 

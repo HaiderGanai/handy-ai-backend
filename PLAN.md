@@ -205,6 +205,8 @@ REST + client polling is enough for v1 — no WebSocket gateway until the user a
 
 **Done when:** the two parties on a booking can exchange messages and no one else can.
 
+**Status: Done (2026-11-03).** Built to `docs/superpowers/specs/2026-11-03-phase-6-messaging-design.md`; see `PHASE_6_API.md` / `PHASE_6_MODULE_GUIDE.md`.
+
 ---
 
 ## Phase 7 — Notifications & Contact Support
