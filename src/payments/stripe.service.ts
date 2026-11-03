@@ -129,10 +129,10 @@ export class StripeService {
       },
       country: 'US',
       email,
-      capabilities: {
-        card_payments: { requested: true }, // US accounts can't have transfers without it
-        transfers: { requested: true },
-      },
+      // ponytail: platform is outside the US, so US providers must use the 'recipient' agreement
+      // (cross-border payouts: transfers only, no card_payments). Hardcoded; make it config if a US platform ever needs full.
+      tos_acceptance: { service_agreement: 'recipient' },
+      capabilities: { transfers: { requested: true } },
       metadata: { providerId },
     });
     return account.id;
