@@ -127,12 +127,13 @@ export class StripeService {
         requirement_collection: 'stripe',
         stripe_dashboard: { type: 'express' },
       },
-      country: 'US',
+      // must be the platform's own country, or transfers are blocked as cross-border
+      country: this.config.get<string>('STRIPE_CONNECT_COUNTRY') ?? 'GB',
       email,
-      // ponytail: platform is outside the US, so US providers must use the 'recipient' agreement
-      // (cross-border payouts: transfers only, no card_payments). Hardcoded; make it config if a US platform ever needs full.
-      tos_acceptance: { service_agreement: 'recipient' },
-      capabilities: { transfers: { requested: true } },
+      capabilities: {
+        card_payments: { requested: true }, // required alongside transfers for non-recipient accounts
+        transfers: { requested: true },
+      },
       metadata: { providerId },
     });
     return account.id;

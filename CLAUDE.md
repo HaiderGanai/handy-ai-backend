@@ -306,5 +306,5 @@ context only.
 (**seconds, not a duration string** — e.g. `86400`, also used as the session's
 Redis/DB TTL), `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`,
 `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (keys provided
-later, on demand), `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL` (Phase 5; the last two are where
+later, on demand), `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL`, `STRIPE_CONNECT_COUNTRY` (platform country, default `GB`; Phase 5; the last two are where
 Stripe sends users after Checkout / Express onboarding).
