@@ -30,7 +30,8 @@ Writing is allowed only while the booking is `PENDING_PROVIDER`, `CONFIRMED` or 
 | Status | When |
 |---|---|
 | 400 | empty/whitespace body, body over 1000 chars, bad booking id |
-| 404 | not this booking's customer or assigned provider (admins too); provider on a `PENDING_PAYMENT` booking |
+| 403 | wrong role (admins are blocked by the role guard) |
+| 404 | not this booking's customer or assigned provider; provider on a `PENDING_PAYMENT` booking |
 | 409 | `Messaging is closed for this booking!` (`PENDING_PAYMENT`, `DECLINED`, `CANCELLED`, `COMPLETED`) |
 
 The other party is sent a `MESSAGE_RECEIVED` notification (`{ bookingId }`, never the text) — log-only until Phase 7.

@@ -11,8 +11,8 @@ Migration `Phase6Messages1793900000002`. Bookings code was not touched.
 
 ## 2. Who can see a thread
 `getParticipantBooking` is the single gate for both routes: the booking's customer, or the assigned
-provider (matched through `booking.provider.userId`). Anyone else — other customers, other providers,
-admins — gets the same 404 as a missing booking, so ids can't be probed. A provider also gets 404 while
+provider (matched through `booking.provider.userId`). Anyone else — other customers, other providers —
+gets the same 404 as a missing booking, so ids can't be probed. A provider also gets 404 while
 the booking is `PENDING_PAYMENT`, matching how bookings hide unpaid jobs.
 
 ## 3. When writing is allowed

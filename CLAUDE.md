@@ -299,7 +299,7 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
   - `POST` / `GET /bookings/:id/messages`, new `src/messaging/` module, `messages` table (migration
     `Phase6Messages1793900000002`, ran **locally only** - apply on the server DB before deploying).
   - One thread per booking (no conversation entity). Only the booking's customer and assigned provider;
-    everyone else (admins too) and providers on `PENDING_PAYMENT` bookings get 404. Reading works in any
+    everyone else (admins get 403 from the role guard) and providers on `PENDING_PAYMENT` bookings get 404. Reading works in any
     status; writing only in `PENDING_PROVIDER`/`CONFIRMED`/`IN_PROGRESS` (409 otherwise). Responses carry
     `sender: CUSTOMER|PROVIDER`, never email/phone. Polling via `?after=<messageId>&limit=` (default 50, max 100).
   - These rules were my calls from `PLAN.md` (no discussion round) - change them if product disagrees.
