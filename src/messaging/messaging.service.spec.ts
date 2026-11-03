@@ -1,8 +1,13 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { MoreThan } from 'typeorm';
 import { Booking } from '../booking/entities/booking.entity';
 import { BookingStatus } from '../booking/enums/booking-status.enum';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -15,6 +20,8 @@ describe('MessagingService', () => {
   let service: MessagingService;
   const bookingRepo = { findOne: jest.fn() };
   const messageRepo = {
+    find: jest.fn(),
+    findOne: jest.fn(),
     create: jest.fn((v: object) => v),
     save: jest.fn((v: object) =>
       Promise.resolve({ id: 'm1', createdAt: new Date('2030-01-01'), ...v }),
@@ -147,6 +154,92 @@ describe('MessagingService', () => {
       const dto = plainToInstance(SendMessageDto, { body: '  hi  ' });
       expect(await validate(dto)).toHaveLength(0);
       expect(dto.body).toBe('hi');
+    });
+  });
+
+  describe('listMessages', () => {
+    const row = (id: string, at: string) => ({
+      id,
+      bookingId: 'b1',
+      senderId: 'customer1',
+      body: id,
+      createdAt: new Date(at),
+    });
+
+    it('reads in any booking status, including COMPLETED', async () => {
+      bookingRepo.findOne.mockResolvedValue(booking(BookingStatus.COMPLETED));
+      messageRepo.find.mockResolvedValue([]);
+      await expect(
+        service.listMessages('customer1', Role.CUSTOMER, 'b1', {}),
+      ).resolves.toEqual({ messages: [] });
+    });
+
+    it('without after returns the latest limit messages, oldest first', async () => {
+      bookingRepo.findOne.mockResolvedValue(booking(BookingStatus.CONFIRMED));
+      messageRepo.find.mockResolvedValue([
+        row('m2', '2030-01-02'),
+        row('m1', '2030-01-01'),
+      ]);
+      const result = await service.listMessages(
+        'customer1',
+        Role.CUSTOMER,
+        'b1',
+        { limit: 2 },
+      );
+      expect(messageRepo.find).toHaveBeenCalledWith({
+        where: { bookingId: 'b1' },
+        order: { createdAt: 'DESC' },
+        take: 2,
+      });
+      expect(result.messages.map((m) => m.id)).toEqual(['m1', 'm2']);
+    });
+
+    it('defaults to 50 messages', async () => {
+      bookingRepo.findOne.mockResolvedValue(booking(BookingStatus.CONFIRMED));
+      messageRepo.find.mockResolvedValue([]);
+      await service.listMessages('customer1', Role.CUSTOMER, 'b1', {});
+      expect(messageRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 50 }),
+      );
+    });
+
+    it('with after returns only newer messages, oldest first', async () => {
+      bookingRepo.findOne.mockResolvedValue(booking(BookingStatus.CONFIRMED));
+      const cursor = row('m1', '2030-01-01');
+      messageRepo.findOne.mockResolvedValue(cursor);
+      messageRepo.find.mockResolvedValue([row('m2', '2030-01-02')]);
+      const result = await service.listMessages(
+        'customer1',
+        Role.CUSTOMER,
+        'b1',
+        { after: 'm1' },
+      );
+      expect(messageRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 'm1', bookingId: 'b1' },
+      });
+      expect(messageRepo.find).toHaveBeenCalledWith({
+        where: { bookingId: 'b1', createdAt: MoreThan(cursor.createdAt) },
+        order: { createdAt: 'ASC' },
+        take: 50,
+      });
+      expect(result.messages.map((m) => m.id)).toEqual(['m2']);
+    });
+
+    it('400s when after is not a message of this booking', async () => {
+      bookingRepo.findOne.mockResolvedValue(booking(BookingStatus.CONFIRMED));
+      messageRepo.findOne.mockResolvedValue(null);
+      await expect(
+        service.listMessages('customer1', Role.CUSTOMER, 'b1', {
+          after: 'other-booking-message',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('404s for a non-participant', async () => {
+      bookingRepo.findOne.mockResolvedValue(booking(BookingStatus.CONFIRMED));
+      await expect(
+        service.listMessages('other', Role.CUSTOMER, 'b1', {}),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

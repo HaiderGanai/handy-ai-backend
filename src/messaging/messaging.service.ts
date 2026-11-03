@@ -1,14 +1,16 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { MoreThan, Repository } from 'typeorm';
 import { Booking } from '../booking/entities/booking.entity';
 import { BookingStatus } from '../booking/enums/booking-status.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Role } from '../user/enums/role.enum';
+import { ListMessagesQueryDto } from './dto/list-messages-query.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { Message } from './entities/message.entity';
 
@@ -66,6 +68,43 @@ export class MessagingService {
       bookingId,
     });
     return this.toView(message, booking);
+  }
+
+  async listMessages(
+    userId: string,
+    role: Role,
+    bookingId: string,
+    query: ListMessagesQueryDto,
+  ): Promise<{ messages: MessageView[] }> {
+    const booking = await this.getParticipantBooking(userId, role, bookingId);
+    const take = query.limit ?? 50;
+
+    //no cursor: the latest page, flipped to oldest first
+    if (!query.after) {
+      const latest = await this.messageRepository.find({
+        where: { bookingId },
+        order: { createdAt: 'DESC' },
+        take,
+      });
+      return {
+        messages: latest.reverse().map((m) => this.toView(m, booking)),
+      };
+    }
+
+    //cursor: must be a message of this booking, so ids from other threads can't be probed
+    const cursor = await this.messageRepository.findOne({
+      where: { id: query.after, bookingId },
+    });
+    if (!cursor) {
+      throw new BadRequestException('Unknown message cursor!');
+    }
+    // ponytail: cursor is createdAt (microseconds); two messages in the same microsecond could be skipped, add a sequence column if it ever shows up
+    const newer = await this.messageRepository.find({
+      where: { bookingId, createdAt: MoreThan(cursor.createdAt) },
+      order: { createdAt: 'ASC' },
+      take,
+    });
+    return { messages: newer.map((m) => this.toView(m, booking)) };
   }
 
   private async getParticipantBooking(
