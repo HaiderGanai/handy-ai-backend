@@ -9,6 +9,7 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
 import { MailModule } from './mail/mail.module';
+import { MessagingModule } from './messaging/messaging.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ProviderModule } from './provider/provider.module';
 import { RedisModule } from './redis/redis.module';
@@ -28,6 +29,7 @@ import { UserModule } from './user/user.module';
     ProviderModule,
     BookingModule,
     PaymentsModule,
+    MessagingModule,
   ],
   controllers: [HealthController],
 })
