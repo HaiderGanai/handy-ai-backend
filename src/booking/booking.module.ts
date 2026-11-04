@@ -32,5 +32,6 @@ import { BookingService } from './services/booking.service';
     AdminBookingController,
   ],
   providers: [BookingPlanService, BookingService, AdminBookingService],
+  exports: [BookingService, BookingPlanService],
 })
 export class BookingModule {}
