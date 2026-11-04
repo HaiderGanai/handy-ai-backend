@@ -1,7 +1,12 @@
-import { BadGatewayException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { BookingService } from '../booking/services/booking.service';
 import { RedisService } from '../redis/redis.service';
 import { ChatDto } from './dto/chat.dto';
 import { HandyMessageRole } from './entities/handy-message.entity';
@@ -22,6 +27,8 @@ describe('HandyChatService', () => {
     execute: jest.fn(),
   };
   const redis = { incrementWithExpiry: jest.fn() };
+  const bookingService = { createBooking: jest.fn() };
+  const cache = { get: jest.fn(), del: jest.fn() };
   const config = {
     get: (key: string) => ({ HANDY_CHAT_LIMIT: '30' })[key],
   } as unknown as ConfigService;
@@ -33,6 +40,8 @@ describe('HandyChatService', () => {
     tools as unknown as HandyToolsService,
     redis as unknown as RedisService,
     config,
+    bookingService as unknown as BookingService,
+    cache as never,
   );
 
   const card = (planId: string) => ({ planId }) as unknown as PlanCard;
@@ -191,6 +200,95 @@ describe('HandyChatService', () => {
       take: 50,
     });
     expect(result.messages.map((m) => m.id)).toEqual(['1', '2']);
+  });
+});
+
+describe('HandyChatService.confirmPlan', () => {
+  const messageRepo = {
+    save: jest.fn((v: unknown) => Promise.resolve(v)),
+    create: jest.fn((v: object) => v),
+  };
+  const bookingService = { createBooking: jest.fn() };
+  const cache = { get: jest.fn(), del: jest.fn() };
+  const service = new HandyChatService(
+    messageRepo as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    bookingService as unknown as BookingService,
+    cache as never,
+  );
+  // a cache round-trip turns Dates into strings
+  const stored = {
+    subServiceId: 's1',
+    providerId: 'p1',
+    scheduledAt: '2030-03-06T10:00:00.000Z',
+    notes: 'ladders',
+  };
+  const PLAN = '22222222-2222-4222-8222-222222222222';
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    messageRepo.save.mockImplementation((v: unknown) => Promise.resolve(v));
+    messageRepo.create.mockImplementation((v: object) => v);
+  });
+
+  it('creates the booking from the stored plan for the caller and returns booking + checkoutUrl', async () => {
+    cache.get.mockResolvedValue(stored);
+    bookingService.createBooking.mockResolvedValue({
+      booking: { id: 'b1' },
+      checkoutUrl: 'https://pay',
+    });
+    const result = await service.confirmPlan('u1', PLAN);
+    expect(cache.get).toHaveBeenCalledWith(`handy_plan:u1:${PLAN}`);
+    expect(bookingService.createBooking).toHaveBeenCalledWith('u1', {
+      subServiceId: 's1',
+      providerId: 'p1',
+      scheduledAt: new Date('2030-03-06T10:00:00.000Z'),
+      notes: 'ladders',
+    });
+    expect(result).toEqual({
+      booking: { id: 'b1' },
+      checkoutUrl: 'https://pay',
+    });
+  });
+
+  it('deletes the plan after booking and tells the chat to complete payment', async () => {
+    cache.get.mockResolvedValue(stored);
+    bookingService.createBooking.mockResolvedValue({
+      booking: {},
+      checkoutUrl: 'u',
+    });
+    await service.confirmPlan('u1', PLAN);
+    expect(cache.del).toHaveBeenCalledWith(`handy_plan:u1:${PLAN}`);
+    expect(messageRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'u1',
+        role: HandyMessageRole.ASSISTANT,
+        content: expect.stringMatching(/payment/i),
+      }),
+    );
+  });
+
+  it('404s for an unknown, expired, used or another user plan, and books nothing', async () => {
+    cache.get.mockResolvedValue(undefined);
+    await expect(service.confirmPlan('u1', PLAN)).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(bookingService.createBooking).not.toHaveBeenCalled();
+  });
+
+  it('keeps the plan when booking fails so the customer can retry', async () => {
+    cache.get.mockResolvedValue(stored);
+    bookingService.createBooking.mockRejectedValue(
+      new ConflictException('taken!'),
+    );
+    await expect(service.confirmPlan('u1', PLAN)).rejects.toThrow(
+      ConflictException,
+    );
+    expect(cache.del).not.toHaveBeenCalled();
   });
 });
 

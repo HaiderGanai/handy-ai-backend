@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Req,
@@ -33,5 +35,13 @@ export class HandyController {
     @Query() query: ListChatQueryDto,
   ) {
     return this.handyChatService.getChat(req.user.id, query);
+  }
+
+  @Post('/plans/:planId/confirm')
+  async confirmPlan(
+    @Req() req: AuthenticatedRequest,
+    @Param('planId', ParseUUIDPipe) planId: string,
+  ) {
+    return this.handyChatService.confirmPlan(req.user.id, planId);
   }
 }

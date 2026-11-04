@@ -1,7 +1,16 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { Cache } from 'cache-manager';
 import { Repository } from 'typeorm';
+import { BookingService } from '../booking/services/booking.service';
 import { CacheKeys } from '../common/cache-keys';
 import { RedisService } from '../redis/redis.service';
 import { User } from '../user/entities/user.entity';
@@ -12,7 +21,7 @@ import {
   HandyMessageRole,
 } from './entities/handy-message.entity';
 import { buildSystemPrompt } from './handy.prompt';
-import { HandyToolsService, PlanCard } from './handy-tools.service';
+import { HandyToolsService, PlanCard, StoredPlan } from './handy-tools.service';
 import { LlmMessage, LlmService } from './llm.service';
 
 const HISTORY_FOR_MODEL = 20;
@@ -32,6 +41,8 @@ export class HandyChatService {
     private readonly handyToolsService: HandyToolsService,
     private readonly redisService: RedisService,
     private readonly config: ConfigService,
+    private readonly bookingService: BookingService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   async chat(
@@ -133,6 +144,35 @@ export class HandyChatService {
         createdAt: m.createdAt,
       })),
     };
+  }
+
+  async confirmPlan(userId: string, planId: string) {
+    //the key carries the caller's id, so another user's plan id simply isn't found
+    const key = CacheKeys.handyPlan(userId, planId);
+    const plan = await this.cache.get<StoredPlan>(key);
+    if (!plan) {
+      throw new NotFoundException('Plan not found or expired!');
+    }
+
+    //book as the caller; the cache turned the date into a string
+    const result = await this.bookingService.createBooking(userId, {
+      subServiceId: plan.subServiceId,
+      providerId: plan.providerId,
+      scheduledAt: new Date(plan.scheduledAt),
+      notes: plan.notes,
+    });
+
+    //single use, and only dropped once the booking exists so a failed attempt can be retried
+    await this.cache.del(key);
+    await this.handyMessageRepository.save(
+      this.handyMessageRepository.create({
+        userId,
+        role: HandyMessageRole.ASSISTANT,
+        content:
+          'Your booking is reserved - complete the payment to confirm it.',
+      }),
+    );
+    return result;
   }
 
   private async assertWithinUsageLimit(userId: string): Promise<void> {
