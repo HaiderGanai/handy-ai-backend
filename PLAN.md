@@ -232,6 +232,37 @@ Covers the remaining piece of spec §7 not already built in Phases 3/4/5.
 
 ---
 
+## Phase 9 — Handy AI Chat (the conversational booking layer)
+
+Covers spec §3 "AI Conversational Interface" and §4.2 "Handy Chat Interface". This is the GPT-4 layer
+that the scope cuts deferred; the deterministic Phase 4 plan endpoint was built as its swap point.
+Detail: `docs/superpowers/specs/2026-11-04-phase-9-handy-ai-chat-design.md`, plan:
+`docs/superpowers/plans/2026-11-04-phase-9-handy-ai-chat.md`.
+
+**How it works:** a bounded tool-calling loop in the backend. The customer only sees a chat screen; the LLM
+extracts service/date/time/location, asks at most 1-2 follow-ups, and calls tools that wrap existing
+services. It can **propose** a plan but cannot **book**: the app's Confirm button calls a separate endpoint.
+
+**Entities**
+- `HandyMessage`: `id`, `userId`, `role` (USER | ASSISTANT), `content`, `createdAt`. Plans live in the cache (30 min), not the DB.
+
+**Endpoints** (CUSTOMER role)
+- `POST /handy/chat` `{ message, timezone? }` -> `{ reply, plan? }`; `GET /handy/chat` -> stored history.
+- `POST /handy/plans/:planId/confirm` -> `{ booking, checkoutUrl }` (same as `POST /bookings`).
+
+**LLM tools:** `list_services`, `propose_plan`, `get_my_bookings` only - no create/edit/cancel (edit and cancel
+stay in the schedule view per spec §4.2).
+
+**Also:** `LlmService` is the only file that touches the OpenAI SDK (model from env, default `gpt-4o`); per-user
+usage limit via Redis (`HANDY_CHAT_LIMIT` per `HANDY_CHAT_WINDOW_SECONDS`, 429 over it); `OPENAI_API_KEY` arrives
+later - everything is built and unit-tested against a fake `LlmService` first.
+
+**Done when:** a customer can go from free text to a plan card to a Stripe Checkout link through the chat
+endpoints, the model provably cannot create a booking, and the usage limit works. Live model quality is
+verified separately once a real key exists.
+
+---
+
 ## Cross-cutting, applies to every phase
 
 - Every DTO uses `class-validator`, every route follows `GUIDE.md` naming/controller-thinness rules.

@@ -18,7 +18,7 @@ later, elsewhere.
 
 | Spec says | We're doing instead | Why |
 |---|---|---|
-| GPT-4 / OpenAI conversational booking | Deterministic rule-based `/bookings/plan` endpoint (flat-rate lookup + simple provider matching) | User: focus on working APIs first, AI layer comes after |
+| GPT-4 / OpenAI conversational booking | Deterministic rule-based `/bookings/plan` endpoint (flat-rate lookup + simple provider matching) | User: focus on working APIs first, AI layer comes after. **Lifted 2026-11-04: now Phase 9** (`docs/superpowers/specs/2026-11-04-phase-9-handy-ai-chat-design.md`) |
 | Phone number sign-up + OTP | Email OTP only | User: skip phone OTP for now |
 | SendGrid transactional email | nodemailer (SMTP) | User: no SendGrid yet |
 
@@ -61,6 +61,7 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
 | 6 | In-app messaging (per booking, user↔provider) | Done |
 | 7 | Notifications (FCM-ready interface, no-op impl for now) & contact support | Not started |
 | 8 | Admin platform stats | Not started |
+| 9 | Handy AI chat (LLM tool-calling layer over the booking services) | Spec + plan written, not started |
 
 ## Key architectural decisions log
 
