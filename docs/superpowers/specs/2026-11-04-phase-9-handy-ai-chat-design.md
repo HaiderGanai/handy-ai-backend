@@ -33,7 +33,7 @@ availability and payment stay in the existing deterministic services (`BookingPl
 4. The final text is stored and returned with the latest plan card, if one was proposed.
 
 ## Decisions (my calls - not yet user-approved)
-1. **Provider:** OpenAI, as the spec says; model from env `OPENAI_MODEL` (default `gpt-4o`). Only
+1. **Provider:** OpenAI, as the spec says; model from env `OPENAI_MODEL` (no default - not chosen yet; chat is 503 until set). Only
    `LlmService` touches the SDK (same shape as `StripeService`), so switching vendors is one file.
 2. **Tools the model gets (read-only or propose-only):** `list_services` (catalog),
    `propose_plan(subServiceId, scheduledAt, notes?)` (wraps `BookingPlanService.planBooking`),

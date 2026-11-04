@@ -61,7 +61,7 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
 | 6 | In-app messaging (per booking, user↔provider) | Done |
 | 7 | Notifications (FCM-ready interface, no-op impl for now) & contact support | Not started |
 | 8 | Admin platform stats | Not started |
-| 9 | Handy AI chat (LLM tool-calling layer over the booking services) | Spec + plan written, not started |
+| 9 | Handy AI chat (LLM tool-calling layer over the booking services) | Done (built against a fake LLM; live model unverified until a key is set) |
 
 ## Key architectural decisions log
 
@@ -307,6 +307,21 @@ Build plan and per-phase detail: `PLAN.md`. Update the status column as phases l
   - Known gaps: message text isn't scanned for contact details; no rate limiting, unread counts or push (log-only
     `notify` until Phase 7); createdAt cursor can skip two same-microsecond messages; admins can't read threads.
   - `seed:demo` adds a short chat to every CONFIRMED/IN_PROGRESS/COMPLETED demo booking.
+
+- 2026-11-04 - Phase 9 built (Handy AI chat). Writeups: `PHASE_9_MODULE_GUIDE.md`, `PHASE_9_API.md`; Postman "Handy"
+  folder; spec/plan in `docs/superpowers/specs|plans/2026-11-04-phase-9-handy-ai-chat*`.
+  - `POST/GET /handy/chat`, `POST /handy/plans/:planId/confirm` (CUSTOMER only), module `src/handy/`, table
+    `handy_messages` (migration `Phase9HandyChat1793900000003`, ran **locally only** - apply on the server DB).
+  - Bounded tool-calling loop (max 5 model rounds). Tools: `list_services`, `propose_plan`, `get_my_bookings` only.
+    **The model cannot book**: `propose_plan` stores the plan in the cache (30 min, key `handy_plan:<userId>:<planId>`),
+    the app's Confirm button calls the confirm endpoint, which books via `BookingService.createBooking` as the caller.
+  - `LlmService` is the only OpenAI SDK user. **Env: `OPENAI_API_KEY`, `OPENAI_MODEL` (no default - the model isn't
+    chosen yet; chat returns 503 until both are set), `HANDY_CHAT_LIMIT` (30), `HANDY_CHAT_WINDOW_SECONDS` (3600).**
+    Usage limit over the window -> 429. The chosen model must support chat-completions tool calling.
+  - Verified: unit tests against a fake LLM and a local boot without a key. NOT verified: any real model behaviour -
+    run the `PHASE_9_MODULE_GUIDE.md` §6 checklist once a key exists.
+  - Known gaps: no streaming, per-message (not per-token) limit, no moderation, UTC-only availability, plans lost on
+    a Redis flush.
 
 ## Conventions
 

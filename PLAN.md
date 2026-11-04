@@ -253,9 +253,11 @@ services. It can **propose** a plan but cannot **book**: the app's Confirm butto
 **LLM tools:** `list_services`, `propose_plan`, `get_my_bookings` only - no create/edit/cancel (edit and cancel
 stay in the schedule view per spec §4.2).
 
-**Also:** `LlmService` is the only file that touches the OpenAI SDK (model from env, default `gpt-4o`); per-user
+**Also:** `LlmService` is the only file that touches the OpenAI SDK (model from env, no default); per-user
 usage limit via Redis (`HANDY_CHAT_LIMIT` per `HANDY_CHAT_WINDOW_SECONDS`, 429 over it); `OPENAI_API_KEY` arrives
-later - everything is built and unit-tested against a fake `LlmService` first.
+later - everything is built and unit-tested against a fake `LlmService` first. Model: `OPENAI_MODEL` (not chosen yet; no default).
+
+**Status: Built 2026-11-04** (live model behaviour unverified until a key is provided; see `PHASE_9_MODULE_GUIDE.md` §6 checklist). The model name has no default: set `OPENAI_MODEL`.
 
 **Done when:** a customer can go from free text to a plan card to a Stripe Checkout link through the chat
 endpoints, the model provably cannot create a booking, and the usage limit works. Live model quality is

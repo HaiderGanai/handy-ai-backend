@@ -21,7 +21,7 @@
 - Errors: missing `OPENAI_API_KEY` -> `ServiceUnavailableException('Handy is not configured!')`; any LLM failure -> `BadGatewayException('Handy is unavailable, please retry!')` with the real error logged. Messages end with `!` (GUIDE.md).
 - `timezone`: optional IANA name, default `UTC`, invalid -> 400.
 - Migration only (`handy_messages`); run locally and verify; the server DB needs it before deploy.
-- Env: `OPENAI_API_KEY`, `OPENAI_MODEL` (default `gpt-4o`), `HANDY_CHAT_LIMIT`, `HANDY_CHAT_WINDOW_SECONDS` in `.env.example`.
+- Env: `OPENAI_API_KEY`, `OPENAI_MODEL` (no default - not chosen yet; chat is 503 until set), `HANDY_CHAT_LIMIT`, `HANDY_CHAT_WINDOW_SECONDS` in `.env.example`.
 
 ## Review Focus
 

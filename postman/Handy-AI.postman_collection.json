@@ -74,6 +74,11 @@
       "key": "messageId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "planId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -2144,6 +2149,117 @@
               ]
             },
             "description": "Only messages newer than the given message id. 400 if the id is not from this booking."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Handy",
+      "item": [
+        {
+          "name": "Chat with Handy",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/handy/chat",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "handy",
+                "chat"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Customer. Free text in; reply (and a plan card when one was proposed) out. Copy plan.planId into {{planId}}. 503 until OPENAI_API_KEY and OPENAI_MODEL are set.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Can someone clean my flat tomorrow morning?\",\n  \"timezone\": \"Asia/Karachi\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Chat History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/handy/chat?limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "handy",
+                "chat"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Customer. Stored conversation, oldest first."
+          }
+        },
+        {
+          "name": "Confirm Plan",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/handy/plans/{{planId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "handy",
+                "plans",
+                "{{planId}}",
+                "confirm"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Customer. Books the proposed plan; returns { booking, checkoutUrl }. Single use, 30 min."
           }
         }
       ]
