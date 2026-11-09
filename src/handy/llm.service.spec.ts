@@ -68,6 +68,7 @@ describe('LlmService', () => {
     });
     expect(create).toHaveBeenCalledWith({
       model: 'some-model',
+      reasoning_effort: 'none',
       messages: [
         { role: 'system', content: 'be Handy' },
         { role: 'user', content: 'hi' },

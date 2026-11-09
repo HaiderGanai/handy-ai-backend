@@ -34,6 +34,9 @@ the loop, history, usage limit and plan confirmation · `handy.controller.ts` th
 `OPENAI_API_KEY` and `OPENAI_MODEL` (**no default** - the model isn't chosen yet; without both, chat returns 503),
 `HANDY_CHAT_LIMIT` (default 30) and `HANDY_CHAT_WINDOW_SECONDS` (default 3600). The model must support
 chat-completions tool calling; if the chosen model/API differs, only `llm.service.ts` changes.
+`LlmService` always sends `reasoning_effort: 'none'`: the GPT-6 models (e.g. `gpt-6-luna`) reject function tools on
+`/v1/chat/completions` unless reasoning is off (400 "Function tools with reasoning_effort are not supported…"). To use
+reasoning together with tools, move `llm.service.ts` to the Responses API (`/v1/responses`).
 
 ## 5. Verified
 Unit tests (212 in the suite) run against a fake `LlmService`/tools. Booted against the local database with no key:

@@ -51,6 +51,8 @@ export class LlmService {
     try {
       const response = await client.chat.completions.create({
         model,
+        // function tools on Chat Completions are rejected by the GPT-6 models unless reasoning is off
+        reasoning_effort: 'none',
         messages: messages.map((m) => this.toSdkMessage(m)),
         ...(tools.length > 0 && {
           tools: tools.map((t) => ({
